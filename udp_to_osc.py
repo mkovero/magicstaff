@@ -28,8 +28,13 @@ import threading
 import math
 import time
 from typing import Any, Dict, List, Tuple
+import numpy as np
+from collections import deque
+from scipy.signal import butter, filtfilt
 
 from pythonosc.udp_client import SimpleUDPClient
+
+buffer = deque(maxlen=100)  # ~2s of data at 50 Hz
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +79,12 @@ def parse_args() -> argparse.Namespace:
         help="Minimum seconds between motion triggers",
     )
     parser.add_argument(
+        "--highlight-cooldown",
+        type=float,
+        default=0.05,
+        help="Minimum seconds between highlight triggers",
+    )
+    parser.add_argument(
         "--trigger-address",
         default="/accel/trigger",
         help="OSC address for motion trigger event",
@@ -82,13 +93,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--gesture-threshold",
         type=float,
-        default=3.0,
+        default=10.0,
         help="Acceleration threshold (m/s^2) to detect gestures",
     )
     parser.add_argument(
         "--gesture-cooldown",
         type=float,
-        default=0.5,
+        default=1,
         help="Minimum seconds between gesture triggers",
     )
     parser.add_argument(
@@ -263,6 +274,21 @@ def parse_args() -> argparse.Namespace:
         help="OSC address for Blue channel when --rgb-split is set",
     )
     parser.add_argument(
+        "--addr-r2",
+        default="/r2",
+        help="OSC address for Red channel when --rgb-split is set",
+    )
+    parser.add_argument(
+        "--addr-g2",
+        default="/g2",
+        help="OSC address for Green channel when --rgb-split is set",
+    )
+    parser.add_argument(
+        "--addr-b2",
+        default="/b2",
+        help="OSC address for Blue channel when --rgb-split is set",
+    )
+    parser.add_argument(
         "--log-unmatched",
         action="store_true",
         help="When --print is set, also log packet types that are unmatched",
@@ -299,7 +325,7 @@ def extract_values(payload: Dict[str, Any], type_filter: str) -> Tuple[List[floa
         return None
     ts = payload.get("timestamp")
     ts_int = int(ts) if isinstance(ts, (int, float)) else 0
-    return [x, y, z], ts_int
+    return [x, y, z], float(ts)
 
 
 def scale_to_0_255(value: float, rng: float, use_abs: bool) -> int:
@@ -347,34 +373,93 @@ def minimal_angle_diff_deg(a: float, b: float) -> float:
     d = (a - b + 180.0) % 360.0 - 180.0
     return d
 
+def butter_highpass(data,cutoff, fs, order=2):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+    return filtfilt(b, a, data)
 
-def detect_gesture(accel_x: float, accel_y: float, accel_z: float, threshold: float) -> str | None:
-    """Detect gesture direction based on dominant acceleration component.
+def classify_direction(buffer, history, segment):
+    SHAKE_COUNT = 3          # number of spikes to trigger a shake
+    start, end = segment
+    arr = list(buffer)[start:end]
+    ax = np.array([b[1] for b in arr])
+    ay = np.array([b[2] for b in arr])
+
+    x_range = np.max(ax) - np.min(ax)
+    y_range = np.max(ay) - np.min(ay)
+    if len(history) >= SHAKE_COUNT:
+        history.clear()
+        return "shake"
+    if x_range > y_range:    
+        return "right" if np.mean(ax) > 0 else "left"
+    else:
+        return "up" if np.mean(ay) > 0 else "down"
+
+def detect_gesture(buffer, history,cutoff=0.3,threshold=10, min_len=5):
+    SHAKE_THRESHOLD = 1.2    # g, acceleration change to count as a shake
+    SHAKE_WINDOW = 0.5       # seconds, time window to count shakes
+    if len(buffer) < 10:
+        return None, None # too little data
+
+    try:
+        data = np.array(buffer, dtype=float)
+    except ValueError as e:
+        print("Failed to convert buffer to array:", e)
+    timestamps = data[:, 0]
+    if len(timestamps) >= 2:
+        dt = np.diff(timestamps / 1e9)
+        fs = 1.0 / np.mean(dt)
+    else:
+        print(f"nope, ts length is {len(timestamps)}")
     
-    Returns 'left', 'right', 'up', 'down', or None if no gesture detected.
-    """
-    # Remove gravity bias by focusing on horizontal components
-    # X: left/right, Y: up/down (assuming phone orientation)
-    abs_x = abs(accel_x)
+    ax = butter_highpass(data[:, 1], cutoff, fs)
+    ay = butter_highpass(data[:, 2], cutoff, fs)
+    az = butter_highpass(data[:, 3], cutoff, fs)
+    mag = np.sqrt(ax**2 + ay**2 + az**2)
+
+    above = mag > threshold
+    now = time.time()
+    if history:
+        prev_time, prev_a = history[-1]
+        delta_a = abs(mag - prev_a)
+        if delta_a > SHAKE_THRESHOLD:
+            history.append((now, mag))
+    else:
+        delta_a = 0
+        history.append((now, mag))
+
+    # remove old entries outside the window
+    while history and now - history[0][0] > SHAKE_WINDOW:
+        history.popleft()
+
+    if np.sum(above) > min_len:
+        start = np.argmax(above)
+        end = len(mag) - np.argmax(above[::-1])
+        return (start, end), fs
+    return None, None
+    """  abs_x = abs(accel_x)
     abs_y = abs(accel_y)
+    abs_z = abs(accel_z)
     
     # Check if any component exceeds threshold
-    if abs_x < threshold and abs_y < threshold:
+    if abs_x < threshold and abs_z < threshold2:
         return None
     
     # Determine dominant direction
-    if abs_x > abs_y:
         # Horizontal gesture
+    if abs_x > abs_z:
         if accel_x > 0:
             return 'right'
-        else:
+        elif accel_x < 0:
             return 'left'
     else:
         # Vertical gesture
-        if accel_y > 0:
-            return 'up'
-        else:
+        if accel_z < 0:
             return 'down'
+        if accel_z > 0:
+            return 'up'"""
+
 
 
 def run_bridge(
@@ -402,6 +487,11 @@ def run_bridge(
     addr_r: str,
     addr_g: str,
     addr_b: str,
+    addr_r2: str,
+    addr_g2: str,
+    addr_b2: str,
+    left: bool,
+    right: bool,
     grv_yaw_circular: bool = False,
     grv_yaw_offset_deg: float = 0.0,
     grv_yaw_distance: bool = False,
@@ -416,12 +506,16 @@ def run_bridge(
     grv_roll_offset_deg: float = 0.0,
     grv_roll_range_deg: float | None = None,
     grv_roll_deadband_deg: float = 0.0,
-    gesture_threshold: float = 3.0,
-    gesture_cooldown: float = 0.5,
+    gesture_threshold: float = 10.0,
+    on_threshold: float = 20,
+    gesture_cooldown: float = 1,
+    highlight_cooldown: float = 0.5,
     gesture_left_addr: str = "/left",
     gesture_right_addr: str = "/right",
     gesture_up_addr: str = "/up",
     gesture_down_addr: str = "/down",
+    rotation: int = 0,
+
 ) -> None:
     udp_sock = create_udp_socket(listen_host, listen_port, recv_buf)
     osc_client = SimpleUDPClient(dest_host, dest_port)
@@ -438,7 +532,13 @@ def run_bridge(
     
     # Gesture detection state
     last_gesture_time = 0.0
+    last_light_time = 0.0
+    fs = 50
+    locked = False
 
+
+# History of deltas with timestamps 
+    history = deque()
     # GRV smoothing state (degrees)
     prev_yaw_deg: float | None = None
     prev_pitch_deg: float | None = None
@@ -466,64 +566,85 @@ def run_bridge(
                 continue
             values, ts = result
 
-            try:
-                osc_client.send_message(osc_address, values)
+            #try:
+                #osc_client.send_message(osc_address, values)
                 # Optionally also send timestamp on a separate address
                 # osc_client.send_message(f"{osc_address}/ts", [ts])
-            except Exception as e:
+            #except Exception as e:
                 # Avoid crashing the loop on transient network errors.
-                if do_print:
-                    print(f"OSC send error: {e}", file=sys.stderr)
-                continue
+             #   if do_print:
+              #      print(f"OSC send error: {e}", file=sys.stderr)
+               # continue
 
             # Motion detection: use change in horizontal magnitude (sqrt(x^2 + y^2)).
-            try:
-                x, y, _z = values
-                horiz_mag = math.sqrt(x * x + y * y)
-                if prev_horiz_mag is not None:
-                    delta = abs(horiz_mag - prev_horiz_mag)
-                    now = time.monotonic()
-                    if delta >= motion_threshold and (now - last_trigger_time) >= motion_cooldown:
-                        try:
-                            # Send trigger with payload [1, delta]
-                            osc_client.send_message(trigger_address, [1, float(delta)])
-                            last_trigger_time = now
-                            if do_print:
-                                print(f"TRIGGER {trigger_address} delta={delta:.3f}")
-                        except Exception as e:
-                            if do_print:
-                                print(f"OSC trigger send error: {e}", file=sys.stderr)
-                prev_horiz_mag = horiz_mag
-            except Exception:
-                # If any numeric issue occurs, skip motion detection for this packet.
-                pass
 
             # Gesture detection: detect fast movements in cardinal directions
             try:
-                x, y, z = values
-                gesture = detect_gesture(x, y, z, gesture_threshold)
-                if gesture is not None:
+                now2 = time.monotonic()
+                if (now2 - last_light_time) >= highlight_cooldown:
+                    coolDown = False
+                    if (left or right):
+                        osc_client.send_message(gesture_left_addr, [0])
+                        osc_client.send_message(gesture_right_addr, [0])
+                        left = False
+                        right = False
+                if not coolDown:
+                    buffer.append((float(ts),*values))
+                    x,y,z = values
+                if do_print:
+                    print(f"FS: {fs} - {addr} -> {osc_address} {values} with {x}, {y}, {z}")
+                segment,fs = detect_gesture(buffer,history)
+                if segment is not None:
                     now = time.monotonic()
                     if (now - last_gesture_time) >= gesture_cooldown:
                         try:
+                            gesture = classify_direction(buffer,history,segment)
                             # Send gesture-specific trigger
-                            if gesture == 'left':
-                                osc_client.send_message(gesture_left_addr, [1])
+                            if gesture == 'left' and not locked:
+                                if rotation == 1:
+                                     osc_client.send_message(gesture_left_addr, [1])
+                                     left = True
+                                     last_light_time = now2
+                                     rotation = rotation - 1
                                 if do_print:
-                                    print(f"GESTURE LEFT {gesture_left_addr}")
-                            elif gesture == 'right':
-                                osc_client.send_message(gesture_right_addr, [1])
+                                    print(f"GESTURE LEFT {gesture_left_addr}  with vals {x}/{y}/{z}")
+                            elif gesture == 'right' and not locked:
+                                if rotation == 0:
+                                    osc_client.send_message(gesture_right_addr, [1])
+                                    rotation = rotation + 1
+                                    right = True
+                                    last_light_time = now2
                                 if do_print:
-                                    print(f"GESTURE RIGHT {gesture_right_addr}")
-                            elif gesture == 'up':
-                                osc_client.send_message(gesture_up_addr, [1])
-                                if do_print:
-                                    print(f"GESTURE UP {gesture_up_addr}")
+                                    print(f"GESTURE RIGHT {gesture_right_addr}  with vals {x}/{y}/{z}")
                             elif gesture == 'down':
-                                osc_client.send_message(gesture_down_addr, [1])
+                              #  osc_client.send_message(gesture_up_addr, [1])
                                 if do_print:
-                                    print(f"GESTURE DOWN {gesture_down_addr}")
+                                    print(f"GESTURE DOWN {gesture_up_addr}  with vals {x}/{y}/{z}")
+                            elif gesture == 'up':
+                                if not locked: 
+                                    locked = True
+                                    osc_client.send_message(gesture_left_addr, [1])
+                                    osc_client.send_message(gesture_right_addr, [1])
+                                    last_light_time = now2
+                                    left = True
+                                    right = True
+                                if do_print:
+                                    print(f"GESTURE UP {gesture_down_addr} with vals {x}/{y}/{z}")
+
+                            elif gesture == 'shake':
+                                if locked:
+                                    locked = False
+                                    osc_client.send_message(gesture_left_addr, [1])
+                                    osc_client.send_message(gesture_right_addr, [1])
+                                    last_light_time = now2
+                                    left = True
+                                    right = True
+                                if do_print:
+                                    print(f"SHAKE {gesture_down_addr} with vals {x}/{y}/{z}")
                             last_gesture_time = now
+                            coolDown = True
+                            #buffer.clear()
+                        
                         except Exception as e:
                             if do_print:
                                 print(f"OSC gesture send error: {e}", file=sys.stderr)
@@ -531,8 +652,6 @@ def run_bridge(
                 # If any numeric issue occurs, skip gesture detection for this packet.
                 pass
 
-            if do_print:
-                print(f"{addr} -> {osc_address} {values}")
 
         # Gyroscope: map to 0..255 for RGB control
         elif ptype == gyro_type_filter:
@@ -544,24 +663,30 @@ def run_bridge(
                 r = scale_to_0_255(gvals[0], gyro_range, gyro_abs)
                 g = scale_to_0_255(gvals[1], gyro_range, gyro_abs)
                 b = scale_to_0_255(gvals[2], gyro_range, gyro_abs)
-                if rgb_split:
-                    osc_client.send_message(addr_r, [r])
-                    osc_client.send_message(addr_g, [g])
-                    osc_client.send_message(addr_b, [b])
-                else:
-                    osc_client.send_message(gyro_addr255, [r, g, b])
-                if do_print:
+                if coolDown == False:
                     if rgb_split:
-                        print(f"{addr} -> {addr_r}/{addr_g}/{addr_b} R={r} G={g} B={b} (gyro x,y,z={gvals})")
+                        if rotation == 0:
+                            osc_client.send_message(addr_r, [r])
+                            osc_client.send_message(addr_g, [g])
+                            osc_client.send_message(addr_b, [b])
+                        elif rotation == 1:
+                            osc_client.send_message(addr_r2, [r])
+                            osc_client.send_message(addr_g2, [g])
+                            osc_client.send_message(addr_b2, [b])                        
                     else:
-                        print(f"{addr} -> {gyro_addr255} [R={r} G={g} B={b}] (gyro x,y,z={gvals})")
+                        osc_client.send_message(gyro_addr255, [r, g, b])
+                    if do_print:
+                        if rgb_split:
+                            print(f"{rotation} - {addr} -> {addr_r}/{addr_g}/{addr_b} R={r} G={g} B={b} (gyro x,y,z={gvals})")
+                        else:
+                            print(f"{rotation} - {addr} -> {gyro_addr255} [R={r} G={g} B={b}] (gyro x,y,z={gvals})")
             except Exception as e:
                 if do_print:
                     print(f"OSC gyro send error: {e}", file=sys.stderr)
                 continue
 
         # Game Rotation Vector: quaternion -> yaw/pitch/roll -> 0..255
-        elif ptype == grv_type_filter:
+        elif ptype == grv_type_filter and not locked:
             values = payload.get("values")
             if not isinstance(values, list) or len(values) < 3:
                 continue
@@ -637,17 +762,23 @@ def run_bridge(
                     b = scale_to_0_255(rdist, roll_range, True)
                 else:
                     b = scale_to_0_255(roll_deg, roll_range, grv_abs)
-                if rgb_split:
-                    osc_client.send_message(addr_r, [r])
-                    osc_client.send_message(addr_g, [g])
-                    osc_client.send_message(addr_b, [b])
-                else:
-                    osc_client.send_message(grv_addr255, [r, g, b])
-                if do_print:
+                if coolDown == False:
                     if rgb_split:
-                        print(f"{addr} -> {addr_r}/{addr_g}/{addr_b} R={r} G={g} B={b} (yaw,pitch,roll deg={[round(yaw_deg,1), round(pitch_deg,1), round(roll_deg,1)]})")
+                        if rotation == 0:
+                            osc_client.send_message(addr_r, [r])
+                            osc_client.send_message(addr_g, [g])
+                            osc_client.send_message(addr_b, [b])
+                        elif rotation == 1:
+                            osc_client.send_message(addr_r2, [r])
+                            osc_client.send_message(addr_g2, [g])
+                            osc_client.send_message(addr_b2, [b]) 
                     else:
-                        print(f"{addr} -> {grv_addr255} [R={r} G={g} B={b}] (yaw,pitch,roll deg={[round(yaw_deg,1), round(pitch_deg,1), round(roll_deg,1)]})")
+                        osc_client.send_message(grv_addr255, [r, g, b])
+                    if do_print:
+                        if rgb_split:
+                            print(f"{rotation} - {addr} -> {addr_r}/{addr_g}/{addr_b} R={r} G={g} B={b} (yaw,pitch,roll deg={[round(yaw_deg,1), round(pitch_deg,1), round(roll_deg,1)]})")
+                        else:
+                            print(f"{rotation} - {addr} -> {grv_addr255} [R={r} G={g} B={b}] (yaw,pitch,roll deg={[round(yaw_deg,1), round(pitch_deg,1), round(roll_deg,1)]})")
             except Exception as e:
                 if do_print:
                     print(f"OSC grv send error: {e}", file=sys.stderr)
@@ -692,6 +823,9 @@ def main() -> None:
             addr_r=args.addr_r,
             addr_g=args.addr_g,
             addr_b=args.addr_b,
+            addr_r2=args.addr_r2,
+            addr_g2=args.addr_g2,
+            addr_b2=args.addr_b2,
             grv_yaw_circular=args.grv_yaw_circular,
             grv_yaw_offset_deg=args.grv_yaw_offset_deg,
             grv_yaw_distance=args.grv_yaw_distance,
@@ -712,6 +846,8 @@ def main() -> None:
             gesture_right_addr=args.gesture_right_addr,
             gesture_up_addr=args.gesture_up_addr,
             gesture_down_addr=args.gesture_down_addr,
+            left=False,
+            right=False,
         )
     except KeyboardInterrupt:
         pass
