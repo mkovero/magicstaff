@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug FreeRTOS POSIX",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/udp_json_listener",
+            "args": [],
+            "preLaunchTask": "Build Project",
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                { "description": "Enable pretty-printing", "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ]
+        }
+    ]
+}
