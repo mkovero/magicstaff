@@ -47,5 +47,8 @@ typedef struct {
 void netprocess(void *pvParameters);
 void detectorTask(void *params);
 int64_t get_current_ms(void);
+void gameTask(void *pv);
+void oscTask(void *pv);
+
 
 #endif

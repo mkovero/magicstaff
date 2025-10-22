@@ -2,6 +2,8 @@
     "files.associations": {
         "queue.h": "c",
         "tinyosc.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "inet.h": "c",
+        "stdlib.h": "c"
     }
 }

@@ -20,6 +20,7 @@ add_library(freertos STATIC ${FREERTOS_SRC})
 target_include_directories(freertos PUBLIC
     FreeRTOS/include
     FreeRTOS/portable/ThirdParty/GCC/Posix
+    ${CMAKE_SOURCE_DIR}/include
 )
 
 set(TINYOSC_SRC tinyosc/tinyosc.c)
@@ -29,7 +30,7 @@ target_include_directories(tinyosc PUBLIC tinyosc)
 # -------------------------------
 # Your main executable
 # -------------------------------
-add_executable(udp_json_listener main.c receiver.c health.c detector.c)
+add_executable(udp_json_listener main.c receiver.c health.c detector.c osc.c game.c)
 target_include_directories(udp_json_listener PRIVATE 
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/jsmn
