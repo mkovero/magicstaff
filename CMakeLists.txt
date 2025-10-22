@@ -16,10 +16,15 @@ set(FREERTOS_SRC
     FreeRTOS/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c
 )
 add_library(freertos STATIC ${FREERTOS_SRC})
+
 target_include_directories(freertos PUBLIC
     FreeRTOS/include
     FreeRTOS/portable/ThirdParty/GCC/Posix
 )
+
+set(TINYOSC_SRC tinyosc/tinyosc.c)
+add_library(tinyosc STATIC ${TINYOSC_SRC})
+target_include_directories(tinyosc PUBLIC tinyosc)
 
 # -------------------------------
 # Your main executable
@@ -31,5 +36,5 @@ target_include_directories(udp_json_listener PRIVATE
 )
 
 # Link FreeRTOS and pthread for POSIX port
-target_link_libraries(udp_json_listener PRIVATE freertos pthread m)
+target_link_libraries(udp_json_listener PRIVATE freertos pthread m tinyosc)
 

@@ -26,11 +26,24 @@ float HighpassFilter_Update(HighpassFilter *f, float input)
     return out;
 }
 
+typedef enum
+{
+    RIGHT,
+    LEFT,
+    UP,
+    DOWN,
+    UPRIGHT,
+    UPLEFT,
+    DOWNRIGHT,
+    DOWNLEFT,
+    MIXED,
+    WEAK,
+    NOTKNOWN
+} Direction;
 
-
-
+#define MAXITEMS 1 // 0..1..
 #define CUTOFF 0.1f     // Hz
-#define THRESH 1.5f     // g units (filter out gentle movements)
+#define THRESH 8.5f     // g units (filter out gentle movements)
 #define MIN_LEN 3       // min consecutive samples for gesture (reduced for faster detection)
 #define HISTORY_SIZE 64 // history of previous samples for sliding detection
 
