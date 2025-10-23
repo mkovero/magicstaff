@@ -21,7 +21,7 @@ TaskHandle_t gameHandle = NULL;
 
 uint64_t oscSent = 0;
 uint8_t item = 0;
-bool locked = false;
+gestureState gesture;
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {

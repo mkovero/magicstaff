@@ -27,6 +27,7 @@ static float gesture_ax_history[HISTORY_SIZE];
 static float gesture_ay_history[HISTORY_SIZE];
 static int gesture_history_count = 0;
 extern uint8_t item;
+extern gestureState gesture;
 
 static Direction classify_single_sample(float ax_val, float ay_val)
 {
@@ -188,7 +189,7 @@ void update_latency(int64_t now_ms, int64_t received_ms)
     }
 
     int64_t compensated_latency = latency - offset_ms;
-   // printf("Latency (EMA): now=%ld, recv=%ld, lat=%ld offset=%ld, comp=%ld ms\n", now_ms, received_ms, latency, offset_ms, compensated_latency);
+    // printf("Latency (EMA): now=%ld, recv=%ld, lat=%ld offset=%ld, comp=%ld ms\n", now_ms, received_ms, latency, offset_ms, compensated_latency);
 }
 int64_t compute_latency(int64_t sensor_timestamp_ms)
 {
@@ -221,6 +222,68 @@ int64_t compute_latency(int64_t sensor_timestamp_ms)
 
     return estimated_processing_delay;
 }
+
+void gestureReact()
+{
+    TickType_t currentTime = xTaskGetTickCount();
+
+    // Gesture is still active and long enough - classify it
+    if ((currentTime - gesture.lastGesture) > gesture.gestureCooldown)
+    {
+        oscSample osc;
+        Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
+        switch (direction)
+        {
+        case LEFT:
+            if ((item > 0) && gesture.locked)
+            {
+                item--;
+                osc.type = CTRLLEFT;
+                xQueueSend(oscQueue, &osc, portMAX_DELAY);
+                printf("Left triggered, item count: %d\n", item);
+            }
+            break;
+        case RIGHT:
+            if ((item < MAXITEMS) && gesture.locked)
+            {
+                item++;
+                osc.type = CTRLRIGHT;
+                xQueueSend(oscQueue, &osc, portMAX_DELAY);
+                printf("Right triggered, item count: %d\n", item);
+            }
+            break;
+        case DOWN:
+            break;
+        case UP:
+            printf("Up triggered\n");
+            if (gesture.locked)
+            {
+                osc.type = CTRLBOTH;
+                xQueueSend(oscQueue, &osc, portMAX_DELAY);
+                gesture.locked = false;
+                printf("Control unlocked\n");
+            }
+            else
+            {
+                osc.type = CTRLBOTH;
+                xQueueSend(oscQueue, &osc, portMAX_DELAY);
+                gesture.locked = true;
+                printf("Control locked\n");
+            }
+            break;
+        default:
+            break;
+        }
+        gesture.lastGesture = xTaskGetTickCount();
+        //   printf("🎯 GESTURE COMPLETE (end of batch): %d (duration=%d samples)\n",
+        //        direction, gesture_above_count);
+    }
+    else
+    {
+        printf("Gesture cooling down %d/%d\n", (currentTime - gesture.lastGesture), gesture.gestureCooldown);
+    }
+
+}
 void detectorTask(void *params)
 {
     SensorBuffer *buf;
@@ -243,9 +306,8 @@ void detectorTask(void *params)
     float az[BUFFER_SIZE];
     float mag[BUFFER_SIZE];
     int above[BUFFER_SIZE];
-    TickType_t lastGesture = 0;
-    TickType_t gestureCooldown = 500;
-    extern bool locked;
+    gesture.lastGesture = 0;
+    gesture.gestureCooldown = 500;
 
     for (;;)
     {
@@ -271,7 +333,7 @@ void detectorTask(void *params)
                 {
                     fs = valid_samples / dt_sum;
                 }
-             //   printf("Estimated sampling frequency: %.2f Hz (from %d valid intervals)\n", fs, valid_samples);
+                //   printf("Estimated sampling frequency: %.2f Hz (from %d valid intervals)\n", fs, valid_samples);
             }
 
             // Initialize filters
@@ -346,7 +408,7 @@ void detectorTask(void *params)
             if (count > 0)
             {
                 avglat = sum_latency / (float)count;
-              //  printf("Processing delay stats: min=%ld, max=%ld, avg=%.2f, estimated=%.2f ms (from %ld samples)\n",
+                //  printf("Processing delay stats: min=%ld, max=%ld, avg=%.2f, estimated=%.2f ms (from %ld samples)\n",
                 //       min_latency, max_latency, avglat, (float)estimated_processing_delay, count);
             }
 
@@ -386,46 +448,12 @@ void detectorTask(void *params)
                 }
                 else
                 {
-                    // Sample below threshold
                     if (gesture_active)
                     {
-                        // Gesture ended - check if it was long enough
                         if (gesture_above_count >= MIN_LEN)
                         {
-                            // Valid gesture detected - classify the complete gesture
-                            Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
-                            switch (direction)
-                            {
-                            case LEFT:
-                                if (item > 0)
-                                {
-                                    item--;
-                                    printf("Left triggered, item count: %d", item);
-                                }
-                                break;
-                            case RIGHT:
-                                if (item < MAXITEMS)
-                                {
-                                    item++;
-                                    printf("Right triggered, item count: %d", item);
-                                }
-                                break;
-                            case UP:
-                                break;
-                            case DOWN:
-                                break;
-                            default:
-                                break;
-                            }
-                            printf("🎯 GESTURE COMPLETE: %d (duration=%d samples, samples=%d)\n",
-                                   direction, gesture_above_count, gesture_history_count);
+                            gestureReact();
                         }
-                        else
-                        {
-                         //   printf("🎬 Gesture too short: %d samples (min=%d)\n", gesture_above_count, MIN_LEN);
-                        }
-
-                        // Reset gesture state
                         gesture_active = false;
                         gesture_above_count = 0;
                         gesture_history_count = 0;
@@ -438,59 +466,7 @@ void detectorTask(void *params)
             // Check if there's an ongoing gesture that needs to be completed
             if (gesture_active && gesture_above_count >= MIN_LEN)
             {
-                TickType_t currentTime = xTaskGetTickCount();
-                // Gesture is still active and long enough - classify it
-                if ((currentTime - lastGesture) > gestureCooldown)
-                {
-                    oscSample osc;
-                    Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
-                    switch (direction)
-                    {
-                    case LEFT:
-                        if ((item > 0) && !locked)
-                        {
-                            item--;
-                            osc.type = CTRLLEFT;
-                            xQueueSend(oscQueue, &osc, portMAX_DELAY);
-                            printf("Left triggered, item count: %d\n", item);
-                        }
-                        break;
-                    case RIGHT:
-                        if ((item < MAXITEMS) && !locked)
-                        {
-                            item++;
-                            osc.type = CTRLRIGHT;
-                            xQueueSend(oscQueue, &osc, portMAX_DELAY);
-                            printf("Right triggered, item count: %d\n", item);
-                        }
-                        break;
-                    case UP:
-                        break;
-                    case DOWN:
-                        printf("Down triggered\n");
-                        if (locked)
-                        {
-                            locked = false;
-                            printf("Control unlocked\n");
-                        }
-                        else
-                        {
-                            locked = true;
-                            printf("Control locked\n");
-                        }
-                        break;
-                    default:
-                        break;
-                    }
-                    lastGesture = xTaskGetTickCount();
-                 //   printf("🎯 GESTURE COMPLETE (end of batch): %d (duration=%d samples)\n",
-                   //        direction, gesture_above_count);
-                }
-                else
-                {
-                    printf("Gesture cooling down %d/%d\n", (currentTime - lastGesture), gestureCooldown);
-                }
-                // Reset gesture state
+                gestureReact();
                 gesture_active = false;
                 gesture_above_count = 0;
                 gesture_history_count = 0;
@@ -511,8 +487,8 @@ void detectorTask(void *params)
                     if (above[i])
                         above_count++;
                 }
-               // printf("📊 Stats: max_mag=%.3f, above_threshold=%d/%d, threshold=%.3f\n",
-                 //      max_mag, above_count, samples_to_process, THRESH);
+                // printf("📊 Stats: max_mag=%.3f, above_threshold=%d/%d, threshold=%.3f\n",
+                //      max_mag, above_count, samples_to_process, THRESH);
             }
         }
     }

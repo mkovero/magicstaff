@@ -10,7 +10,7 @@
 
 extern QueueHandle_t oscQueue;
 extern uint64_t oscSent;
-extern bool locked;
+extern gestureState gesture;
 extern uint8_t item;
 
 void oscTask(void *pv)
@@ -44,7 +44,7 @@ void oscTask(void *pv)
             switch (osc.type)
             {
             case GAMERGB:
-                if (!locked)
+                if (!gesture.locked)
                 {
                     char buffer[64];
                     tosc_bundle bundle;
@@ -87,7 +87,7 @@ void oscTask(void *pv)
                 }
                 printf("L1\n");
 
-                vTaskDelay(pdMS_TO_TICKS(100));
+                vTaskDelay(pdMS_TO_TICKS(200));
                 msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/left", "i", 0);
                 if (sendto(sockfd, bufferL, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
@@ -107,7 +107,7 @@ void oscTask(void *pv)
                 }
                 printf("R1\n");
 
-                vTaskDelay(pdMS_TO_TICKS(100));
+                vTaskDelay(pdMS_TO_TICKS(200));
                 msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/right", "i", 0);
                 if (sendto(sockfd, bufferL, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
@@ -117,6 +117,38 @@ void oscTask(void *pv)
                 printf("R0\n");
 
                 break;
+            case CTRLBOTH:
+                char bufferB[16];
+                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/right", "i", 1);
+                if (sendto(sockfd, bufferB, msg_size, 0,
+                           (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+                {
+                    perror("sendto");
+                }
+                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/left", "i", 1);
+                if (sendto(sockfd, bufferB, msg_size, 0,
+                           (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+                {
+                    perror("sendto");
+                }
+                printf("B1\n");
+
+                vTaskDelay(pdMS_TO_TICKS(100));
+                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/right", "i", 0);
+                if (sendto(sockfd, bufferB, msg_size, 0,
+                           (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+                {
+                    perror("sendto");
+                }
+                                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/left", "i", 0);
+                if (sendto(sockfd, bufferB, msg_size, 0,
+                           (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+                {
+                    perror("sendto");
+                }
+                printf("B0\n");
+
+            break;
             default:
                 break;
             }

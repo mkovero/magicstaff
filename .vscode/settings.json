@@ -4,6 +4,8 @@
         "tinyosc.h": "c",
         "string.h": "c",
         "inet.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "datatypes.h": "c",
+        "random": "c"
     }
 }

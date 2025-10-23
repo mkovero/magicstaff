@@ -2,6 +2,7 @@
 #define DATATYPES_H
 #include <stdint.h>
 #include <tinyosc.h>
+#include <FreeRTOS.h>
 #define BUFFER_SIZE_BYTES 1024
 #define MAX_TOKENS 128
 
@@ -18,9 +19,21 @@ typedef enum
 {
 GAMERGB,
 CTRLLEFT,
-CTRLRIGHT
+CTRLRIGHT,
+CTRLBOTH
 } oscType;
 
+typedef struct {
+    TickType_t lastGesture;
+    TickType_t gestureCooldown;
+    bool locked;
+} gestureState;
+
+typedef struct {
+    double yaw;
+    double pitch;
+    double roll;
+} positionSample;
 
 typedef struct {
     uint8_t r;
