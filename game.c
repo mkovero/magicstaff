@@ -196,7 +196,7 @@ colorSample gyroColor(float values[3])
     float yaw_deg = degrees(pos.yaw);
     float pitch_deg = degrees(pos.pitch);
     float roll_deg = degrees(pos.roll);
-    float grv_ema = 0.8f;
+    float grv_ema = 0.5f;
     //printf("Gyro converted: %.2f(x) -> %.2f, %.2f(y) -> %.2f, %.2f(z) -> %.2f, 0(w) -> %.2f \n", qx, yaw_deg, qy, pitch_deg, qz, roll_deg, qw);
     static float prev_yaw_deg = 69.69f;
     static float prev_pitch_deg = 69.69f;
@@ -205,13 +205,13 @@ colorSample gyroColor(float values[3])
     static bool pitch_init = false;
     static bool roll_init = false;
     const float yaw_offset = 0.0f;
-    const float yaw_deadband = 5.0f;
+    const float yaw_deadband = 0.0f;
     const float yaw_range = 60.0f;
     const float pitch_offset = 0.0f;
-    const float pitch_deadband = 5.0f;
+    const float pitch_deadband = 0.0f;
     const float pitch_range = 90.0f;
     const float roll_offset = 0.0f;
-    const float roll_deadband = 5.0f;
+    const float roll_deadband = 0.0f;
     const float roll_range = 90.0f;
     // New: Adjustable yaw calibration
 
