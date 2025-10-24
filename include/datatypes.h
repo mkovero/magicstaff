@@ -27,6 +27,7 @@ typedef struct {
     TickType_t lastGesture;
     TickType_t gestureCooldown;
     bool locked;
+    bool reallyLocked;
 } gestureState;
 
 typedef struct {
@@ -43,6 +44,8 @@ typedef struct {
 typedef struct {
     colorSample color;
     oscType type;
+    uint8_t item;
+    uint32_t delay;
 } oscSample;
 
 typedef struct {

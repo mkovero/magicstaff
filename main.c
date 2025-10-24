@@ -12,6 +12,7 @@
 QueueHandle_t gameQueue = NULL;
 QueueHandle_t accelQueue = NULL;
 QueueHandle_t oscQueue = NULL;
+QueueHandle_t gestureQueue = NULL;
 
 TaskHandle_t netTaskHandle = NULL;
 TaskHandle_t senderTaskHandle = NULL;
@@ -19,9 +20,7 @@ TaskHandle_t oscHandle = NULL;
 TaskHandle_t gameHandle = NULL;
 
 
-uint64_t oscSent = 0;
-uint8_t item = 0;
-gestureState gesture;
+//gestureState gesture;
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
@@ -63,13 +62,14 @@ int main()
     accelQueue = xQueueCreate(10, sizeof(SensorBuffer *));
     gameQueue = xQueueCreate(10, sizeof(SensorSample));
     oscQueue = xQueueCreate(10, sizeof(oscSample));
+    gestureQueue = xQueueCreate(1, sizeof(gestureState*));
 
     xTaskCreate(netprocess, "Receiver", 4096, NULL, configMAX_PRIORITIES-1, &netTaskHandle);
     xTaskCreate(detectorTask, "Detector", 5048, NULL, configMAX_PRIORITIES-2, &senderTaskHandle);
     xTaskCreate(gameTask, "Game processor", 1024, NULL, configMAX_PRIORITIES-3, &gameHandle);
     xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES-3, &oscHandle);
 
-   // xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
+    xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
 
     vTaskStartScheduler();
 

@@ -66,6 +66,7 @@ void json_token_to_str(const char *json, jsmntok_t *tok, char *buf, size_t bufle
 void handle_json(const char *json, int length, SensorBuffer *accelBuffer)
 {
     SensorBuffer *a = accelBuffer;
+   // xQueuePeek(accelQueue, &a, portMAX_DELAY);
     SensorSample gameSample;
 
     jsmn_parser parser;

@@ -9,13 +9,13 @@
 #include <unistd.h>
 
 extern QueueHandle_t oscQueue;
-extern uint64_t oscSent;
-extern gestureState gesture;
-extern uint8_t item;
+extern QueueHandle_t gestureQueue;
 
 void oscTask(void *pv)
 {
     printf("OSC Started\n");
+    uint64_t oscSent = 0;
+
     while (oscQueue == NULL)
     {
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -34,6 +34,12 @@ void oscTask(void *pv)
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(7700);                       // target port
     server_addr.sin_addr.s_addr = inet_addr("192.168.9.131"); // target IP
+    while (gestureQueue == NULL)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    };
+    gestureState *gesture;
+    xQueuePeek(gestureQueue, &gesture, portMAX_DELAY);
 
     while (1)
     {
@@ -44,12 +50,12 @@ void oscTask(void *pv)
             switch (osc.type)
             {
             case GAMERGB:
-                if (!gesture.locked)
+                if (!gesture->locked)
                 {
                     char buffer[64];
                     tosc_bundle bundle;
                     tosc_writeBundle(&bundle, TINYOSC_TIMETAG_IMMEDIATELY, buffer, sizeof(buffer));
-                    switch (item)
+                    switch (osc.item)
                     {
 
                     case 0:
@@ -86,7 +92,7 @@ void oscTask(void *pv)
                     perror("sendto");
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(200));
+                vTaskDelay(pdMS_TO_TICKS(osc.delay));
                 msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/left", "i", 0);
                 if (sendto(sockfd, bufferL, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
@@ -104,7 +110,7 @@ void oscTask(void *pv)
                     perror("sendto");
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(200));
+                vTaskDelay(pdMS_TO_TICKS(osc.delay));
                 msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/right", "i", 0);
                 if (sendto(sockfd, bufferL, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
@@ -126,7 +132,7 @@ void oscTask(void *pv)
                     perror("sendto");
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(200));
+                vTaskDelay(pdMS_TO_TICKS(osc.delay));
                 tosc_writeBundle(&bundleBoth, TINYOSC_TIMETAG_IMMEDIATELY, bufferB, sizeof(bufferB));
                 tosc_writeNextMessage(&bundleBoth, "/right", "i", 0);
                 tosc_writeNextMessage(&bundleBoth, "/left", "i", 0);
