@@ -85,7 +85,6 @@ void oscTask(void *pv)
                 {
                     perror("sendto");
                 }
-                printf("L1\n");
 
                 vTaskDelay(pdMS_TO_TICKS(200));
                 msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/left", "i", 0);
@@ -94,7 +93,6 @@ void oscTask(void *pv)
                 {
                     perror("sendto");
                 }
-                printf("L0\n");
 
                 break;
             case CTRLRIGHT:
@@ -105,7 +103,6 @@ void oscTask(void *pv)
                 {
                     perror("sendto");
                 }
-                printf("R1\n");
 
                 vTaskDelay(pdMS_TO_TICKS(200));
                 msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/right", "i", 0);
@@ -114,41 +111,33 @@ void oscTask(void *pv)
                 {
                     perror("sendto");
                 }
-                printf("R0\n");
 
                 break;
             case CTRLBOTH:
-                char bufferB[16];
-                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/right", "i", 1);
+                char bufferB[64];
+                tosc_bundle bundleBoth;
+                tosc_writeBundle(&bundleBoth, TINYOSC_TIMETAG_IMMEDIATELY, bufferB, sizeof(bufferB));
+                tosc_writeNextMessage(&bundleBoth, "/right", "i", 1);
+                tosc_writeNextMessage(&bundleBoth, "/left", "i", 1);
+                msg_size = tosc_getBundleLength(&bundleBoth);
                 if (sendto(sockfd, bufferB, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
                 {
                     perror("sendto");
                 }
-                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/left", "i", 1);
-                if (sendto(sockfd, bufferB, msg_size, 0,
-                           (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-                {
-                    perror("sendto");
-                }
-                printf("B1\n");
 
-                vTaskDelay(pdMS_TO_TICKS(100));
-                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/right", "i", 0);
+                vTaskDelay(pdMS_TO_TICKS(200));
+                tosc_writeBundle(&bundleBoth, TINYOSC_TIMETAG_IMMEDIATELY, bufferB, sizeof(bufferB));
+                tosc_writeNextMessage(&bundleBoth, "/right", "i", 0);
+                tosc_writeNextMessage(&bundleBoth, "/left", "i", 0);
+                msg_size = tosc_getBundleLength(&bundleBoth);
                 if (sendto(sockfd, bufferB, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
                 {
                     perror("sendto");
                 }
-                                msg_size = tosc_writeMessage(bufferB, sizeof(bufferB), "/left", "i", 0);
-                if (sendto(sockfd, bufferB, msg_size, 0,
-                           (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-                {
-                    perror("sendto");
-                }
-                printf("B0\n");
 
-            break;
+                break;
             default:
                 break;
             }
