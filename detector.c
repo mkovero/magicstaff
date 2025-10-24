@@ -149,7 +149,7 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
     if (x_dominance > SHAKE_THRESHOLD || y_dominance > SHAKE_THRESHOLD)
     {
         shakeCount++;
-        printf("Shake detected (%d) %.2f/%.2f\n", shakeCount, x_dominance, y_dominance);
+        //printf("Shake detected (%d) %.2f/%.2f\n", shakeCount, x_dominance, y_dominance);
         lastShake = get_current_ms();
     }
     if (shakeCount > 2)
