@@ -137,6 +137,27 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
     if (x_dominance < MIN_THRESHOLD && y_dominance < MIN_THRESHOLD)
         return WEAK;
 
+    const float SHAKE_THRESHOLD = 300.0f;
+    static uint8_t shakeCount = 0;
+    static int64_t lastShake = 0;
+    const int64_t shakeLifetime = 1000;
+    if ((get_current_ms() - lastShake) > shakeLifetime)
+    {
+        shakeCount = 0;
+    }
+
+    if (x_dominance > SHAKE_THRESHOLD || y_dominance > SHAKE_THRESHOLD)
+    {
+        shakeCount++;
+        printf("Shake detected (%d) %.2f/%.2f\n", shakeCount, x_dominance, y_dominance);
+        lastShake = get_current_ms();
+    }
+    if (shakeCount > 2)
+    {
+        printf("Shake triggered\n");
+        shakeCount = 0;
+        return SHAKE;
+    }
     // Classify based on dominant axis and direction
     if (x_dominance > y_dominance * 1.2f)
     { // X-axis dominant (with some tolerance)
@@ -227,62 +248,72 @@ void gestureReact()
 {
     TickType_t currentTime = xTaskGetTickCount();
 
+    oscSample osc;
+    Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
     // Gesture is still active and long enough - classify it
-    if ((currentTime - gesture.lastGesture) > gesture.gestureCooldown)
+    static bool reallyLocked = false;
+    switch (direction)
     {
-        oscSample osc;
-        Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
-        switch (direction)
+    case LEFT:
+        if ((item > 0) && gesture.locked && ((currentTime - gesture.lastGesture) > gesture.gestureCooldown) && !reallyLocked)
         {
-        case LEFT:
-            if ((item > 0) && gesture.locked)
-            {
-                item--;
-                osc.type = CTRLLEFT;
-                xQueueSend(oscQueue, &osc, portMAX_DELAY);
-                printf("Left triggered, item count: %d\n", item);
-            }
-            break;
-        case RIGHT:
-            if ((item < MAXITEMS) && gesture.locked)
-            {
-                item++;
-                osc.type = CTRLRIGHT;
-                xQueueSend(oscQueue, &osc, portMAX_DELAY);
-                printf("Right triggered, item count: %d\n", item);
-            }
-            break;
-        case DOWN:
-            break;
-        case UP:
-            printf("Up triggered\n");
-            if (gesture.locked)
-            {
-                osc.type = CTRLBOTH;
-                xQueueSend(oscQueue, &osc, portMAX_DELAY);
-                gesture.locked = false;
-                printf("Control unlocked\n");
-            }
-            else
+            item--;
+            osc.type = CTRLLEFT;
+            xQueueSend(oscQueue, &osc, portMAX_DELAY);
+        }
+        break;
+    case RIGHT:
+        if ((item < MAXITEMS) && gesture.locked && ((currentTime - gesture.lastGesture) > gesture.gestureCooldown) && !reallyLocked)
+        {
+            item++;
+            osc.type = CTRLRIGHT;
+            xQueueSend(oscQueue, &osc, portMAX_DELAY);
+        }
+        break;
+    case DOWN:
+        break;
+    case UP:
+        if (!reallyLocked && ((currentTime - gesture.lastGesture) > gesture.gestureCooldown))
+        {
+            if (!gesture.locked)
             {
                 osc.type = CTRLBOTH;
                 xQueueSend(oscQueue, &osc, portMAX_DELAY);
                 gesture.locked = true;
                 printf("Control locked\n");
             }
-            break;
-        default:
-            break;
+            else
+            {
+                osc.type = CTRLBOTH;
+                xQueueSend(oscQueue, &osc, portMAX_DELAY);
+                gesture.locked = false;
+                printf("Control unlocked\n");
+            }
         }
-        gesture.lastGesture = xTaskGetTickCount();
-        //   printf("🎯 GESTURE COMPLETE (end of batch): %d (duration=%d samples)\n",
-        //        direction, gesture_above_count);
-    }
-    else
-    {
-        printf("Gesture cooling down %d/%d\n", (currentTime - gesture.lastGesture), gesture.gestureCooldown);
-    }
+        break;
+    case SHAKE:
+        if (gesture.locked && !reallyLocked)
+        {
+            osc.type = CTRLBOTH;
+            xQueueSend(oscQueue, &osc, portMAX_DELAY);
+            reallyLocked = true;
+            printf("Control really locked\n");
+        }
+        else if (reallyLocked)
+        {
+            osc.type = CTRLBOTH;
+            xQueueSend(oscQueue, &osc, portMAX_DELAY);
+            reallyLocked = false;
+            printf("Control really unlocked\n");
+        }
 
+        break;
+    default:
+        break;
+    }
+    gesture.lastGesture = xTaskGetTickCount();
+    //   printf("🎯 GESTURE COMPLETE (end of batch): %d (duration=%d samples)\n",
+    //        direction, gesture_above_count);
 }
 void detectorTask(void *params)
 {

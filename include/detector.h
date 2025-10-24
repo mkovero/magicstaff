@@ -38,6 +38,7 @@ typedef enum
     DOWNLEFT,
     MIXED,
     WEAK,
+    SHAKE,
     NOTKNOWN
 } Direction;
 
