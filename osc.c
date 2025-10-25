@@ -44,9 +44,11 @@ void oscTask(void *pv)
     while (1)
     {
         oscSample osc;
-
+        int msg_size = 0;
         if (xQueueReceive(oscQueue, &osc, portMAX_DELAY))
         {
+            //printf("Received OSC control with type %d delay %d and item %d\n",osc.type, osc.delay, osc.item);
+            
             switch (osc.type)
             {
             case GAMERGB:
@@ -71,7 +73,8 @@ void oscTask(void *pv)
                     default:
                         break;
                     }
-                    int msg_size = tosc_getBundleLength(&bundle);
+                    //msg_size = tosc_getBundleLength(&bundle);
+                    msg_size = sizeof(buffer);
                     // printf("Message size is: %d",msg_size);
                     // tosc_printOscBuffer(buffer, msg_size);
                     //  Send OSC message via UDP
@@ -81,11 +84,12 @@ void oscTask(void *pv)
                         perror("sendto");
                     }
                     oscSent++;
+                    //printf("OSC sent (%d) with msg_size %d (%d/%d/%d)\n",oscSent, msg_size, osc.color.r, osc.color.g, osc.color.b);
                 }
                 break;
             case CTRLLEFT:
                 char bufferL[16];
-                int msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/left", "i", 1);
+                msg_size = tosc_writeMessage(bufferL, sizeof(bufferL), "/left", "i", 1);
                 if (sendto(sockfd, bufferL, msg_size, 0,
                            (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
                 {
@@ -120,7 +124,7 @@ void oscTask(void *pv)
 
                 break;
             case CTRLBOTH:
-                char bufferB[64];
+               char bufferB[64];
                 tosc_bundle bundleBoth;
                 tosc_writeBundle(&bundleBoth, TINYOSC_TIMETAG_IMMEDIATELY, bufferB, sizeof(bufferB));
                 tosc_writeNextMessage(&bundleBoth, "/right", "i", 1);

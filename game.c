@@ -319,11 +319,12 @@ void gameTask(void *pv)
     {
         SensorSample game;
         oscSample osc;
-
+        osc.item = 255;
         if (xQueueReceive(gameQueue, &game, portMAX_DELAY))
         {
             osc.color = gyroColor(game.values);
             osc.type = GAMERGB;
+            osc.delay = 200;
           //  printf("Game sample: timestamp=%ld, values=[%.2f, %.2f, %.2f]->[%d, %d, %d]\n", game.timestamp, game.values[0], game.values[1], game.values[2], osc.color.r, osc.color.g, osc.color.b);
 
             if (xQueueSend(oscQueue, &osc, portMAX_DELAY) != pdPASS)

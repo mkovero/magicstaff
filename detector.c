@@ -252,6 +252,7 @@ void gestureReact()
     xQueuePeek(gestureQueue, &gesture,portMAX_DELAY);
     oscSample osc;
     osc.delay = 200;
+    osc.item = 255;
     Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
     // Gesture is still active and long enough - classify it
     switch (direction)
