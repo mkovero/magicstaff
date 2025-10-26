@@ -86,7 +86,7 @@ void oscTask(void *pv)
                 vTaskDelay(pdMS_TO_TICKS(osc.delay));
                 txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), "/left", "i", 0);
                 udp_send(&txOscBundle, sockfd);
-
+                gesture->locked = false;
                 break;
             case CTRLRIGHT:
                 txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), "/right", "i", 1);
@@ -95,6 +95,7 @@ void oscTask(void *pv)
                 vTaskDelay(pdMS_TO_TICKS(osc.delay));
                 txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), "/right", "i", 0);
                 udp_send(&txOscBundle, sockfd);
+                gesture->locked = false;
 
                 break;
             case CTRLBOTH:

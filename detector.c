@@ -137,7 +137,7 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
     if (x_dominance < MIN_THRESHOLD && y_dominance < MIN_THRESHOLD)
         return WEAK;
 
-    const float SHAKE_THRESHOLD = 300.0f;
+    const float SHAKE_THRESHOLD = 250.0f;
     static uint8_t shakeCount = 0;
     static int64_t lastShake = 0;
     const int64_t shakeLifetime = 1000;
