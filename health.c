@@ -9,6 +9,7 @@ extern TaskHandle_t senderTaskHandle;
 extern TaskHandle_t gameHandle;
 extern TaskHandle_t oscHandle;
 
+
 void FreeRTOS_HealthReport(void) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     TaskHandle_t tasks[] = { netTaskHandle, senderTaskHandle,gameHandle, oscHandle };
@@ -18,11 +19,14 @@ void FreeRTOS_HealthReport(void) {
     printf("Task Name       StackHighWater (words)\n");
     printf("-------------------------------------\n");
 
-    for (int i = 0; i < 4; i++) {
+    UBaseType_t water = uxTaskGetStackHighWaterMark(oscHandle);
+    printf("water: %lu", (unsigned long)water);
+    
+    for (int i = 0; i < 3; i++) {
         UBaseType_t water = uxTaskGetStackHighWaterMark(tasks[i]);
-        printf("%-15s %lu\n", taskNames[i], (unsigned long)water);
+        printf("%-15s %lu\n", taskNames[i], (unsigned)water);
     }
-
+/*
     // Queue example
     if (accelQueue != NULL) {
         printf("Queue accelQueue length: %u / %u\n",
@@ -44,6 +48,6 @@ void FreeRTOS_HealthReport(void) {
                (unsigned int)uxQueueSpacesAvailable(oscQueue));
     } else {
         printf("Queue oscQueue not created yet!\n");
-    }
+    }*/
     printf("=== End of Report ===\n");
 }

@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <tinyosc.h>
 #include <FreeRTOS.h>
+#include <arpa/inet.h>
+
 #define BUFFER_SIZE_BYTES 1024
 #define MAX_TOKENS 128
 
@@ -28,6 +30,7 @@ typedef struct {
     TickType_t gestureCooldown;
     bool locked;
     bool reallyLocked;
+    uint8_t item;
 } gestureState;
 
 typedef struct {
@@ -44,7 +47,6 @@ typedef struct {
 typedef struct {
     colorSample color;
     oscType type;
-    uint8_t item;
     uint32_t delay;
 } oscSample;
 
@@ -59,6 +61,18 @@ typedef struct {
     SensorSample samples[BUFFER_SIZE];
     int head; // next write position
 } SensorBuffer;
+typedef struct
+{
+    uint8_t buf[64];
+    size_t len;
+    struct sockaddr_in addr;
+} UdpPacket;
+
+static inline void udp_send(UdpPacket *pkt, int sockfd)
+{
+    sendto(sockfd, pkt->buf, pkt->len, 0,
+           (struct sockaddr *)&pkt->addr, sizeof(pkt->addr));
+}
 
 void netprocess(void *pvParameters);
 void detectorTask(void *params);
