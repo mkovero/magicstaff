@@ -152,7 +152,7 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
         // printf("Shake detected (%d) %.2f/%.2f\n", shakeCount, x_dominance, y_dominance);
         lastShake = get_current_ms();
     }
-    if (shakeCount > 2)
+    if (shakeCount > 3)
     {
     //    printf("Shake triggered\n");
         shakeCount = 0;
@@ -252,7 +252,6 @@ void gestureReact()
     xQueuePeek(gestureQueue, &gesture,portMAX_DELAY);
     oscSample osc;
     osc.delay = 200;
-    osc.item = 255;
     Direction direction = classify_gesture(gesture_ax_history, gesture_ay_history, 0, gesture_history_count);
     // Gesture is still active and long enough - classify it
     switch (direction)
@@ -261,7 +260,7 @@ void gestureReact()
         if ((item > 0) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
         {
             item--;
-            osc.item = item;
+            gesture->item = item;
             osc.type = CTRLLEFT;
             xQueueSend(oscQueue, &osc, portMAX_DELAY);
         }
@@ -270,7 +269,7 @@ void gestureReact()
         if ((item < MAXITEMS) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
         {
             item++;
-            osc.item = item;
+            gesture->item = item;
             osc.type = CTRLRIGHT;
             xQueueSend(oscQueue, &osc, portMAX_DELAY);
         }
@@ -355,6 +354,7 @@ void detectorTask(void *params)
     gesture.gestureCooldown = 500;
     gesture.locked = false;
     gesture.reallyLocked = false;
+    gesture.item = 0;
     gestureState *ptr = &gesture;
     xQueueSend(gestureQueue,&ptr,portMAX_DELAY);
 

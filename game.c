@@ -196,7 +196,7 @@ colorSample gyroColor(float values[3])
     float yaw_deg = degrees(pos.yaw);
     float pitch_deg = degrees(pos.pitch);
     float roll_deg = degrees(pos.roll);
-    float grv_ema = 0.5f;
+    float grv_ema = 0.9f;
     //printf("Gyro converted: %.2f(x) -> %.2f, %.2f(y) -> %.2f, %.2f(z) -> %.2f, 0(w) -> %.2f \n", qx, yaw_deg, qy, pitch_deg, qz, roll_deg, qw);
     static float prev_yaw_deg = 69.69f;
     static float prev_pitch_deg = 69.69f;
@@ -297,9 +297,9 @@ colorSample gyroColor(float values[3])
       float val = combined_max;
       hsv_to_rgb(hue, sat, val, &color.r, &color.g, &color.b);
       printf("Asked for hue:%.2f sat:%.2f val:%.2f and got colors %d/%d/%d", hue, sat, val, color.r, color.g, color.b);*/
-    color.r = scale_to_8bit(dist, 40.0, true);
-    color.g = scale_to_8bit(pdist, 40.0, true);
-    color.b = scale_to_8bit(rdist, 60.0, true);
+    color.r = scale_to_8bit(dist, 60.0, true);
+    color.g = scale_to_8bit(pdist, 90.0, true);
+    color.b = scale_to_8bit(rdist, 90.0, true);
 
     return color;
 }
@@ -319,7 +319,6 @@ void gameTask(void *pv)
     {
         SensorSample game;
         oscSample osc;
-        osc.item = 255;
         if (xQueueReceive(gameQueue, &game, portMAX_DELAY))
         {
             osc.color = gyroColor(game.values);
