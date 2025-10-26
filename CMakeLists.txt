@@ -12,7 +12,7 @@ set(FREERTOS_SRC
     FreeRTOS/timers.c
     FreeRTOS/event_groups.c
     FreeRTOS/portable/ThirdParty/GCC/Posix/port.c
-    FreeRTOS/portable/MemMang/heap_3.c 
+    FreeRTOS/portable/MemMang/heap_4.c 
     FreeRTOS/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c
 )
 add_library(freertos STATIC ${FREERTOS_SRC})

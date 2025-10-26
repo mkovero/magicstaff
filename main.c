@@ -19,8 +19,12 @@ TaskHandle_t senderTaskHandle = NULL;
 TaskHandle_t oscHandle = NULL;
 TaskHandle_t gameHandle = NULL;
 
+static uint8_t ucHeap[configTOTAL_HEAP_SIZE];
 
-//gestureState gesture;
+HeapRegion_t xHeapRegions[] = {
+    {ucHeap, sizeof(ucHeap)}, // first (and only) region
+    {NULL, 0}                 // terminator
+};
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
@@ -46,14 +50,35 @@ uint32_t ulGetRunTimeCounterValue(void)
 void MonitorTask(void *params)
 {
     char stats[512];
+    TaskHandle_t tasks[] = {netTaskHandle, senderTaskHandle, gameHandle, oscHandle};
+    const char *taskNames[] = {"NetProcess", "Sender", "Processor", "OSC"};
+
     for (;;)
     {
-        vTaskGetRunTimeStats(stats);
-        printf("\n%s\n", stats);
+        //  vTaskGetRunTimeStats(stats);
+        // printf("\n%s\n", stats);
+
+        printf("=== FreeRTOS Health Report ===\n");
+        printf("Task Name       StackHighWater (words)\n");
+        printf("-------------------------------------\n");
+
+        //   UBaseType_t water = uxTaskGetStackHighWaterMark(oscHandle);
+        // printf("water: %lu", (unsigned long)water);
+
+        for (int i = 0; i < 4; i++)
+        {
+            UBaseType_t water = uxTaskGetStackHighWaterMark(tasks[i]);
+            printf("%-15s %lu\n", taskNames[i], (unsigned)water);
+        }
+        size_t free_bytes = xPortGetFreeHeapSize();
+        size_t min_ever_free = xPortGetMinimumEverFreeHeapSize();
+        printf("Free heap: %u bytes, minimum ever free: %u bytes\n",
+               (unsigned)free_bytes, (unsigned)min_ever_free);
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
-void vApplicationIdleHook(void) {
+void vApplicationIdleHook(void)
+{
     struct timespec ts = {0, 1000000}; // 1 ms
     nanosleep(&ts, NULL);
 }
@@ -62,14 +87,14 @@ int main()
     accelQueue = xQueueCreate(10, sizeof(SensorBuffer *));
     gameQueue = xQueueCreate(10, sizeof(SensorSample));
     oscQueue = xQueueCreate(10, sizeof(oscSample));
-    gestureQueue = xQueueCreate(1, sizeof(gestureState*));
+    gestureQueue = xQueueCreate(1, sizeof(gestureState *));
 
-    xTaskCreate(netprocess, "Receiver", 4096, NULL, configMAX_PRIORITIES-1, &netTaskHandle);
-    xTaskCreate(detectorTask, "Detector", 5048, NULL, configMAX_PRIORITIES-2, &senderTaskHandle);
-    xTaskCreate(gameTask, "Game processor", 1024, NULL, configMAX_PRIORITIES-3, &gameHandle);
-    xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES-3, &oscHandle);
+    xTaskCreate(netprocess, "Receiver", 1024, NULL, configMAX_PRIORITIES - 1, &netTaskHandle);
+    xTaskCreate(detectorTask, "Detector", 1024, NULL, configMAX_PRIORITIES - 2, &senderTaskHandle);
+    xTaskCreate(gameTask, "Game processor", 1024, NULL, configMAX_PRIORITIES - 3, &gameHandle);
+    xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES - 3, &oscHandle);
 
-    xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
+  //  xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
 
     vTaskStartScheduler();
 

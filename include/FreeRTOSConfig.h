@@ -11,7 +11,7 @@
 #define configTICK_RATE_HZ              (1000)        /* 1ms tick */
 #define configMAX_PRIORITIES            (5)
 #define configMINIMAL_STACK_SIZE        (128)
-#define configTOTAL_HEAP_SIZE           (20240)
+#define configTOTAL_HEAP_SIZE            (1048576)  // 1 MB
 #define configMAX_TASK_NAME_LEN         (16)
 #define configUSE_16_BIT_TICKS          0
 #define configIDLE_SHOULD_YIELD         1
