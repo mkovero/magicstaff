@@ -19,7 +19,6 @@ extern QueueHandle_t oscQueue;
 extern QueueHandle_t freeQueue;
 extern QueueHandle_t readyQueue;
 
-
 // Parse JSON and store sample
 void jsonTask(void *pvParameters)
 {
@@ -169,7 +168,7 @@ void init_rxBuffers(UdpPacket *packetPool)
         p->len = 0;
 
         // Send pointer to the free queue
-        xQueueSend(freeQueue, &p, 0);
+        xQueueSend(freeQueue, &p, portMAX_DELAY);
     }
 }
 int init_udpserver(uint16_t port)
@@ -215,41 +214,45 @@ void udpRX(void *pvParameters)
         xQueueReceive(freeQueue, &pkt, portMAX_DELAY);
         socklen_t addr_len = sizeof(pkt->addr);
         struct sockaddr_in client_addr;
+        ssize_t n;
 
-        ssize_t n = pkt->len = recvfrom(sockfd, pkt->buf, BUF_SIZE, 0,
-                                        (struct sockaddr *)&client_addr, &addr_len);
+        while (1)
+        { // Inner retry loop for transient errors
+            n = recvfrom(sockfd, pkt->buf, BUF_SIZE, 0,
+                         (struct sockaddr *)&client_addr, &addr_len);
 
-        if (n < 0)
-        {
-            int err = errno; // capture the error code
-            // Handle recoverable errors differently
-            if (err == EAGAIN || err == EWOULDBLOCK || err == EINTR)
+            if (n < 0)
             {
-                // Non-blocking socket has no data, just try again later
+                int err = errno;
+                if (err == EINTR)
+                {
+                    continue; // Retry immediately on interrupt
+                }
+                else if (err == EAGAIN || err == EWOULDBLOCK)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(1)); // Minimal yield if no data (rare for blocking socket)
+                    continue;
+                }
+                else
+                {
+                    printf("recvfrom failed: errno=%d\n", err);
+                    // Fatal error: release buffer and break to get a new one
+                    xQueueSend(freeQueue, &pkt, portMAX_DELAY);
+                    break;
+                }
             }
             else
             {
-                // Serious error: log and optionally close/recreate socket
-                printf("recvfrom failed: errno=%d\n", err);
+                // Success path (n >= 0)
+                pkt->len = (size_t)n;
+                pkt->addr = client_addr;
+                if (pkt->len < BUF_SIZE)
+                {
+                    pkt->buf[pkt->len] = '\0';
+                }
+                xQueueSend(readyQueue, &pkt, portMAX_DELAY);
+                break; // Exit inner loop to get next free buffer
             }
-            xQueueSend(freeQueue, &pkt, 0);
-        }
-        else if (n == 0)
-        {
-            // UDP: n == 0 is unusual; can happen if empty packet sent
-            pkt->len = 0;
-        }
-        else
-        {
-            // valid packet received
-            pkt->len = (size_t)n;
-            pkt->addr = client_addr; // store source address
-            if (pkt->len < BUF_SIZE)
-            {
-                //      printf("pkt len is: %zu, within bounds.", pkt->len);
-                pkt->buf[pkt->len] = '\0';
-            }
-            xQueueSend(readyQueue, &pkt, portMAX_DELAY);
         }
     }
 

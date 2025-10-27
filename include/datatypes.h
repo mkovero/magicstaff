@@ -17,7 +17,7 @@
 #define LINEAR_ACCEL 1
 #define UNKNOWN 255
 
-#define POOL_SIZE 8
+#define POOL_SIZE 12
 #define BUF_SIZE 512
 
 #define HISTORY_SIZE 64 // history of previous samples for sliding detection

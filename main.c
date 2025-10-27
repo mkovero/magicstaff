@@ -3,7 +3,6 @@
 #include <task.h>
 #include <queue.h>
 #include <stdio.h>
-#include "health.h"
 #include <unistd.h>
 #include <stdbool.h>
 #include <math.h>
@@ -18,7 +17,7 @@ QueueHandle_t readyQueue = NULL; // Holds pointers to filled buffers
 
 TaskHandle_t udpRXHandle = NULL;
 TaskHandle_t jsonHandle = NULL;
-TaskHandle_t senderTaskHandle = NULL;
+TaskHandle_t detectorHandle = NULL;
 TaskHandle_t oscHandle = NULL;
 TaskHandle_t gameHandle = NULL;
 
@@ -53,13 +52,13 @@ uint32_t ulGetRunTimeCounterValue(void)
 void MonitorTask(void *params)
 {
     char stats[512];
-    TaskHandle_t tasks[] = {udpRXHandle, senderTaskHandle, gameHandle, oscHandle};
-    const char *taskNames[] = {"NetProcess", "Sender", "Processor", "OSC"};
+    TaskHandle_t tasks[] = {udpRXHandle, jsonHandle, detectorHandle, oscHandle};
+    const char *taskNames[] = {"udpRX", "json", "detector", "OSC"};
 
     for (;;)
     {
-        //  vTaskGetRunTimeStats(stats);
-        // printf("\n%s\n", stats);
+        vTaskGetRunTimeStats(stats);
+        printf("\n%s\n", stats);
 
         printf("=== FreeRTOS Health Report ===\n");
         printf("Task Name       StackHighWater (words)\n");
@@ -68,15 +67,43 @@ void MonitorTask(void *params)
         //   UBaseType_t water = uxTaskGetStackHighWaterMark(oscHandle);
         // printf("water: %lu", (unsigned long)water);
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
             UBaseType_t water = uxTaskGetStackHighWaterMark(tasks[i]);
             printf("%-15s %lu\n", taskNames[i], (unsigned)water);
+        } /*
+         size_t free_bytes = xPortGetFreeHeapSize();
+         size_t min_ever_free = xPortGetMinimumEverFreeHeapSize();
+         printf("Free heap: %u bytes, minimum ever free: %u bytes\n",
+                (unsigned)free_bytes, (unsigned)min_ever_free);*/
+        if (oscQueue != NULL)
+        {
+            printf("Queue oscQueue length: %u / %u\n",
+                   (unsigned int)uxQueueMessagesWaiting(oscQueue),
+                   (unsigned int)uxQueueSpacesAvailable(oscQueue));
         }
-        size_t free_bytes = xPortGetFreeHeapSize();
-        size_t min_ever_free = xPortGetMinimumEverFreeHeapSize();
-        printf("Free heap: %u bytes, minimum ever free: %u bytes\n",
-               (unsigned)free_bytes, (unsigned)min_ever_free);
+        if (freeQueue != NULL)
+        {
+            printf("Queue freeQueue length: %u / %u\n",
+                   (unsigned int)uxQueueMessagesWaiting(freeQueue),
+                   (unsigned int)uxQueueSpacesAvailable(freeQueue));
+        }
+        static unsigned int peak = 0;
+        if (readyQueue != NULL)
+        {
+            unsigned int waiting =  (unsigned int)uxQueueMessagesWaiting(readyQueue);
+            unsigned int avail = (unsigned int)uxQueueSpacesAvailable(readyQueue);
+            if (waiting > peak) { peak = waiting; }
+            printf("Queue readyQueue length: %u / %u with peak %u\n",
+                   waiting,
+                   avail, peak);
+        }
+        if (accelQueue != NULL)
+        {
+            printf("Queue accelQueue length: %u / %u\n",
+                   (unsigned int)uxQueueMessagesWaiting(accelQueue),
+                   (unsigned int)uxQueueSpacesAvailable(accelQueue));
+        }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
@@ -94,12 +121,12 @@ int main()
     freeQueue = xQueueCreate(POOL_SIZE, sizeof(UdpPacket *));
     readyQueue = xQueueCreate(POOL_SIZE, sizeof(UdpPacket *));
 
-    xTaskCreate(udpRX, "Receiver", 6048, NULL, configMAX_PRIORITIES - 1, &udpRXHandle);
+    xTaskCreate(udpRX, "Receiver", 6048, NULL, configMAX_PRIORITIES - 2, &udpRXHandle);
     xTaskCreate(jsonTask, "json parser", 1024, NULL, configMAX_PRIORITIES - 1, &jsonHandle);
-    xTaskCreate(detectorTask, "Detector", 1024, NULL, configMAX_PRIORITIES - 2, &senderTaskHandle);
-    xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES - 3, &oscHandle);
+    xTaskCreate(detectorTask, "Detector", 1024, NULL, configMAX_PRIORITIES - 4, &detectorHandle);
+    xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES - 2, &oscHandle);
 
-    //  xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
+    // xTaskCreate(MonitorTask, "Monitor", 1024, NULL, configMAX_PRIORITIES-1, NULL); // monitor task
 
     vTaskStartScheduler();
 
