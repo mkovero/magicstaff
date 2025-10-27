@@ -13,8 +13,11 @@ QueueHandle_t gameQueue = NULL;
 QueueHandle_t accelQueue = NULL;
 QueueHandle_t oscQueue = NULL;
 QueueHandle_t gestureQueue = NULL;
+QueueHandle_t freeQueue = NULL;  // Holds pointers to free buffers
+QueueHandle_t readyQueue = NULL; // Holds pointers to filled buffers
 
-TaskHandle_t netTaskHandle = NULL;
+TaskHandle_t udpRXHandle = NULL;
+TaskHandle_t jsonHandle = NULL;
 TaskHandle_t senderTaskHandle = NULL;
 TaskHandle_t oscHandle = NULL;
 TaskHandle_t gameHandle = NULL;
@@ -50,7 +53,7 @@ uint32_t ulGetRunTimeCounterValue(void)
 void MonitorTask(void *params)
 {
     char stats[512];
-    TaskHandle_t tasks[] = {netTaskHandle, senderTaskHandle, gameHandle, oscHandle};
+    TaskHandle_t tasks[] = {udpRXHandle, senderTaskHandle, gameHandle, oscHandle};
     const char *taskNames[] = {"NetProcess", "Sender", "Processor", "OSC"};
 
     for (;;)
@@ -82,19 +85,21 @@ void vApplicationIdleHook(void)
     struct timespec ts = {0, 1000000}; // 1 ms
     nanosleep(&ts, NULL);
 }
+
 int main()
 {
     accelQueue = xQueueCreate(10, sizeof(SensorBuffer *));
-    gameQueue = xQueueCreate(10, sizeof(SensorSample));
     oscQueue = xQueueCreate(10, sizeof(oscSample));
     gestureQueue = xQueueCreate(1, sizeof(gestureState *));
+    freeQueue = xQueueCreate(POOL_SIZE, sizeof(UdpPacket *));
+    readyQueue = xQueueCreate(POOL_SIZE, sizeof(UdpPacket *));
 
-    xTaskCreate(netprocess, "Receiver", 1024, NULL, configMAX_PRIORITIES - 1, &netTaskHandle);
+    xTaskCreate(udpRX, "Receiver", 6048, NULL, configMAX_PRIORITIES - 1, &udpRXHandle);
+    xTaskCreate(jsonTask, "json parser", 1024, NULL, configMAX_PRIORITIES - 1, &jsonHandle);
     xTaskCreate(detectorTask, "Detector", 1024, NULL, configMAX_PRIORITIES - 2, &senderTaskHandle);
-    xTaskCreate(gameTask, "Game processor", 1024, NULL, configMAX_PRIORITIES - 3, &gameHandle);
     xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES - 3, &oscHandle);
 
-  //  xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
+    //  xTaskCreate(MonitorTask, "Monitor", 1024, NULL, 1, NULL); // monitor task
 
     vTaskStartScheduler();
 

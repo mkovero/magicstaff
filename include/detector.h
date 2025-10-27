@@ -46,6 +46,5 @@ typedef enum
 #define CUTOFF 0.2f     // Hz
 #define THRESH 4.0f     // g units (filter out gentle movements)
 #define MIN_LEN 3       // min consecutive samples for gesture (reduced for faster detection)
-#define HISTORY_SIZE 64 // history of previous samples for sliding detection
 
 #endif

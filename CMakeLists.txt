@@ -30,7 +30,7 @@ target_include_directories(tinyosc PUBLIC tinyosc)
 # -------------------------------
 # Your main executable
 # -------------------------------
-add_executable(udp_json_listener main.c receiver.c health.c detector.c osc.c game.c)
+add_executable(udp_json_listener main.c receiver.c detector.c osc.c)
 target_include_directories(udp_json_listener PRIVATE 
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/jsmn
