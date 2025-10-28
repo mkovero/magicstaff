@@ -10,6 +10,7 @@
 
 extern QueueHandle_t oscQueue;
 extern QueueHandle_t gestureQueue;
+extern QueueHandle_t oscEventQueue;
 
 // Compute 16-bit CRC/X.25 (poly 0x1021, init 0xFFFF, refin=true, refout=true, xorout=0xFFFF)
 uint16_t qlc_crc16_x25(const char *path)
@@ -30,15 +31,45 @@ uint16_t qlc_crc16_x25(const char *path)
     return (uint16_t)(~crc);
 }
 
-void osc_send(int sockfd, const char*addr, uint8_t value) {
-            smallUdpPacket txOscBundle;
-            memset(&txOscBundle, 0, sizeof(txOscBundle));
-            txOscBundle.addr.sin_addr.s_addr = inet_addr("192.168.9.131");
-            txOscBundle.addr.sin_port = htons(7700);
-            txOscBundle.addr.sin_family = AF_INET;
-                           
-            txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf),addr, "i",  value);
-            udp_send(&txOscBundle,sockfd);
+void osc_send(oscFixture *fixture)
+{
+    smallUdpPacket txOscBundle;
+    memset(&txOscBundle, 0, sizeof(txOscBundle));
+    txOscBundle.addr.sin_addr.s_addr = inet_addr("192.168.9.131");
+    txOscBundle.addr.sin_port = htons(7700);
+    txOscBundle.addr.sin_family = AF_INET;
+
+    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), fixture->pathR, "i", fixture->color.r);
+    udp_send(&txOscBundle, fixture->sockfd);
+    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), fixture->pathG, "i", fixture->color.g);
+    udp_send(&txOscBundle, fixture->sockfd);
+    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), fixture->pathB, "i", fixture->color.b);
+    udp_send(&txOscBundle, fixture->sockfd);
+}
+void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture *fixture)
+{
+    OSC_Event evt;
+    evt.target_us = get_current_us() + delay_us;
+    evt.callback = cb;
+    evt.data = fixture;
+    xQueueSend(oscEventQueue, &evt, portMAX_DELAY);
+}
+
+void light_off_cb(oscFixture *fixture)
+{
+    fixture->color = fixture->oldColor;
+    osc_send(fixture);
+}
+
+void light_on_cb(oscFixture *fixture)
+{
+    fixture->oldColor = fixture->color;
+    fixture->color.r = fixture->onvalue;
+    fixture->color.g = fixture->onvalue;
+    fixture->color.b = fixture->onvalue;
+
+    osc_send(fixture);
+    schedule_osc_event(200000, light_off_cb, fixture); // off after 200 ms
 }
 
 void oscTask(void *pv)
@@ -88,6 +119,10 @@ void oscTask(void *pv)
 
         fixture[x].onvalue = 255;
         fixture[x].offvalue = 0;
+        fixture[x].sockfd = sockfd;
+        fixture[x].oldColor.r = 0;
+        fixture[x].oldColor.g = 0;
+        fixture[x].oldColor.b = 0;
     }
     while (1)
     {
@@ -95,59 +130,31 @@ void oscTask(void *pv)
         uint32_t msg_size = 0;
         if (xQueueReceive(oscQueue, &osc, portMAX_DELAY))
         {
-
+            uint8_t item = atomic_load(&gesture->item); // read
 
             // printf("Received OSC control with type %d delay %d and item %d\n",osc.type, osc.delay, osc.item);
             switch (osc.type)
             {
+                oscData data;
             case GAMERGB:
-                if (!gesture->locked)
+                if (!atomic_load(&gesture->locked))
                 {
-                    osc_send(sockfd, fixture[gesture->item].pathR, osc.color.r );
-                    osc_send(sockfd, fixture[gesture->item].pathG, osc.color.g );
-                    osc_send(sockfd, fixture[gesture->item].pathB, osc.color.b );
-                    fixture[gesture->item].color = osc.color;
+                    fixture[item].color = osc.color;
+                    osc_send(&fixture[item]);
                 }
                 break;
             case CTRLLEFT:
-                    osc_send(sockfd, fixture[gesture->item].pathR, fixture[gesture->item].onvalue );
-                    osc_send(sockfd, fixture[gesture->item].pathG, fixture[gesture->item].onvalue );
-                    osc_send(sockfd, fixture[gesture->item].pathB, fixture[gesture->item].onvalue );
-
-                vTaskDelay(pdMS_TO_TICKS(osc.delay));
-                    osc_send(sockfd, fixture[gesture->item].pathR, fixture[gesture->item].color.r );
-                    osc_send(sockfd, fixture[gesture->item].pathG, fixture[gesture->item].color.g );
-                    osc_send(sockfd, fixture[gesture->item].pathB, fixture[gesture->item].color.b );
+                light_on_cb(&fixture[item]);
                 break;
             case CTRLRIGHT:
-                    osc_send(sockfd, fixture[gesture->item].pathR, fixture[gesture->item].onvalue );
-                    osc_send(sockfd, fixture[gesture->item].pathG, fixture[gesture->item].onvalue );
-                    osc_send(sockfd, fixture[gesture->item].pathB, fixture[gesture->item].onvalue );
-
-                vTaskDelay(pdMS_TO_TICKS(osc.delay));
-                    osc_send(sockfd, fixture[gesture->item].pathR, fixture[gesture->item].color.r );
-                    osc_send(sockfd, fixture[gesture->item].pathG, fixture[gesture->item].color.g );
-                    osc_send(sockfd, fixture[gesture->item].pathB, fixture[gesture->item].color.b );
-
+                light_on_cb(&fixture[item]);
                 break;
             case CTRLBOTH:
 
                 for (int x = 0; x < FIXTURE_COUNT; x++)
                 {
-                    osc_send(sockfd, fixture[x].pathR, fixture[x].onvalue );
-                    osc_send(sockfd, fixture[x].pathG, fixture[x].onvalue );
-                    osc_send(sockfd, fixture[x].pathB, fixture[x].onvalue );
+                    light_on_cb(&fixture[x]);
                 }
-
-
-                vTaskDelay(pdMS_TO_TICKS(osc.delay));
-                for (int x = 0; x < FIXTURE_COUNT; x++)
-                {
-                    osc_send(sockfd, fixture[x].pathR, fixture[x].color.r );
-                    osc_send(sockfd, fixture[x].pathG, fixture[x].color.g );
-                    osc_send(sockfd, fixture[x].pathB, fixture[x].color.b );
-                }
-
 
                 break;
             default:
@@ -158,4 +165,25 @@ void oscTask(void *pv)
         //  vTaskDelay(pdMS_TO_TICKS(20));
     }
     close(sockfd);
+}
+
+void oscEvent(void *pvParameters)
+{
+    OSC_Event evt;
+    for (;;)
+    {
+        if (xQueueReceive(oscEventQueue, &evt, portMAX_DELAY))
+        {
+            int64_t now_us = get_current_us(); // CLOCK_MONOTONIC_RAW
+            if (evt.target_us <= now_us)
+            {
+                evt.callback(evt.data);
+            }
+            else
+            {
+                // Not yet time, put it back at the front of the queue
+                xQueueSendToFront(oscEventQueue, &evt, portMAX_DELAY);
+            }
+        }
+    }
 }

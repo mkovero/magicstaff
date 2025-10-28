@@ -5,6 +5,8 @@
 #include <FreeRTOS.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <stdatomic.h>
+
 #define BUFFER_SIZE_BYTES 1024
 #define MAX_TOKENS 128
 
@@ -44,7 +46,6 @@ typedef enum
     CTRLBOTH
 } oscType;
 
-
 typedef struct
 {
     struct timespec ts;
@@ -60,9 +61,9 @@ typedef struct
 {
     TickType_t lastGesture;
     TickType_t gestureCooldown;
-    bool locked;
+    atomic_bool locked;
     bool reallyLocked;
-    uint8_t item;
+    atomic_uintmax_t item;
     bool active;
     int start_sample;
     int above_count;
@@ -94,12 +95,21 @@ typedef struct
 } oscSample;
 typedef struct
 {
+    int sockfd;
+    const char *addr;
+    uint8_t value;
+    uint8_t offvalue;
+} oscData;
+typedef struct
+{
     const char *pathR;
     const char *pathG;
     const char *pathB;
     uint8_t onvalue;
     uint8_t offvalue;
     colorSample color;
+    colorSample oldColor;
+    int sockfd;
 } oscFixture;
 
 typedef struct
@@ -116,6 +126,15 @@ typedef struct
     int head; // next write position
 } SensorBuffer;
 
+typedef void (*event_cb_t)(oscFixture*);
+
+typedef struct
+{
+    int64_t target_us; // execution time in microseconds (monotonic)
+    event_cb_t callback;
+    oscFixture *data; // optional argument
+} OSC_Event;
+
 static inline void udp_send(smallUdpPacket *pkt, int sockfd)
 {
     sendto(sockfd, pkt->buf, pkt->len, 0,
@@ -131,7 +150,7 @@ static inline int64_t get_current_ms(void)
 static inline int64_t get_current_us(void)
 {
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);  // high-resolution monotonic clock
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts); // high-resolution monotonic clock
     return ts.tv_sec * 1000000LL + ts.tv_nsec / 1000LL;
 }
 
@@ -141,5 +160,5 @@ int64_t get_current_ms(void);
 void gameTask(void *pv);
 void oscTask(void *pv);
 void jsonTask(void *pv);
-
+void oscEvent(void *pvParameters);
 #endif

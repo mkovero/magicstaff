@@ -2,24 +2,21 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <math.h>
 #include <time.h>
+#include <stdio.h>
 
 QueueHandle_t gameQueue = NULL;
 QueueHandle_t accelQueue = NULL;
 QueueHandle_t oscQueue = NULL;
+QueueHandle_t oscEventQueue = NULL;
 QueueHandle_t gestureQueue = NULL;
 QueueHandle_t freeQueue = NULL;  // Holds pointers to free buffers
 QueueHandle_t readyQueue = NULL; // Holds pointers to filled buffers
-
 TaskHandle_t udpRXHandle = NULL;
 TaskHandle_t jsonHandle = NULL;
 TaskHandle_t detectorHandle = NULL;
 TaskHandle_t oscHandle = NULL;
-TaskHandle_t gameHandle = NULL;
+TaskHandle_t oscEventHandle = NULL;
 
 static uint8_t ucHeap[configTOTAL_HEAP_SIZE];
 
@@ -117,6 +114,7 @@ int main()
 {
     accelQueue = xQueueCreate(10, sizeof(SensorBuffer *));
     oscQueue = xQueueCreate(10, sizeof(oscSample));
+    oscEventQueue = xQueueCreate(64, sizeof(OSC_Event));
     gestureQueue = xQueueCreate(1, sizeof(gestureState *));
     freeQueue = xQueueCreate(POOL_SIZE, sizeof(UdpPacket *));
     readyQueue = xQueueCreate(POOL_SIZE, sizeof(UdpPacket *));
@@ -125,6 +123,7 @@ int main()
     xTaskCreate(jsonTask, "json parser", 1024, NULL, configMAX_PRIORITIES - 1, &jsonHandle);
     xTaskCreate(detectorTask, "Detector", 1024, NULL, configMAX_PRIORITIES - 4, &detectorHandle);
     xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES - 2, &oscHandle);
+    xTaskCreate(oscEvent, "OSC event", 1024, NULL, configMAX_PRIORITIES - 2, &oscEventHandle);
 
     // xTaskCreate(MonitorTask, "Monitor", 1024, NULL, configMAX_PRIORITIES-1, NULL); // monitor task
 

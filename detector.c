@@ -147,24 +147,24 @@ void gestureReact()
     switch (direction)
     {
     case LEFT:
-        if ((item >= 0) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
+        if ((item >= 0) && atomic_load(&gesture->locked) && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
         {
             if (item > 0)
             {
                 item--;
             }
-            gesture->item = item;
+            atomic_store(&gesture->item, item);   // write
             osc.type = CTRLLEFT;
         }
         break;
     case RIGHT:
-        if ((item <= MAXITEMS) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
+        if ((item <= MAXITEMS) && atomic_load(&gesture->locked) && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
         {
             if (item < MAXITEMS)
             {
                 item++;
             }
-            gesture->item = item;
+            atomic_store(&gesture->item, item);   // write
             osc.type = CTRLRIGHT;
         }
         break;
@@ -173,22 +173,22 @@ void gestureReact()
     case UP:
         if (!gesture->reallyLocked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown))
         {
-            if (!gesture->locked)
+            if (!atomic_load(&gesture->locked))
             {
-                gesture->locked = true;
+                atomic_store(&gesture->locked, true);
                 osc.type = CTRLBOTH;
                 printf("Control locked\n");
             }
             else
             {
-                gesture->locked = false;
+                atomic_store(&gesture->locked, false);
                 osc.type = CTRLBOTH;
                 printf("Control unlocked\n");
             }
         }
         break;
     case SHAKE:
-        if (gesture->locked && !gesture->reallyLocked)
+        if (atomic_load(&gesture->locked) && !gesture->reallyLocked)
         {
             gesture->reallyLocked = true;
             osc.type = CTRLBOTH;
