@@ -133,12 +133,6 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
     }
 }
 
-int64_t get_current_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts); // Use monotonic time for relative measurements
-    return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
-}
 
 void gestureReact()
 {
@@ -153,21 +147,25 @@ void gestureReact()
     switch (direction)
     {
     case LEFT:
-        if ((item > 0) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
+        if ((item >= 0) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
         {
-            item--;
+            if (item > 0)
+            {
+                item--;
+            }
             gesture->item = item;
             osc.type = CTRLLEFT;
-            xQueueSend(oscQueue, &osc, portMAX_DELAY);
         }
         break;
     case RIGHT:
-        if ((item < MAXITEMS) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
+        if ((item <= MAXITEMS) && gesture->locked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
         {
-            item++;
+            if (item < MAXITEMS)
+            {
+                item++;
+            }
             gesture->item = item;
             osc.type = CTRLRIGHT;
-            xQueueSend(oscQueue, &osc, portMAX_DELAY);
         }
         break;
     case DOWN:
@@ -177,16 +175,14 @@ void gestureReact()
         {
             if (!gesture->locked)
             {
-                osc.type = CTRLBOTH;
-                xQueueSend(oscQueue, &osc, portMAX_DELAY);
                 gesture->locked = true;
+                osc.type = CTRLBOTH;
                 printf("Control locked\n");
             }
             else
             {
-                osc.type = CTRLBOTH;
-                xQueueSend(oscQueue, &osc, portMAX_DELAY);
                 gesture->locked = false;
+                osc.type = CTRLBOTH;
                 printf("Control unlocked\n");
             }
         }
@@ -194,16 +190,14 @@ void gestureReact()
     case SHAKE:
         if (gesture->locked && !gesture->reallyLocked)
         {
-            osc.type = CTRLBOTH;
-            xQueueSend(oscQueue, &osc, portMAX_DELAY);
             gesture->reallyLocked = true;
+            osc.type = CTRLBOTH;
             printf("Control really locked\n");
         }
         else if (gesture->reallyLocked)
         {
-            osc.type = CTRLBOTH;
-            xQueueSend(oscQueue, &osc, portMAX_DELAY);
             gesture->reallyLocked = false;
+            osc.type = CTRLBOTH;
             printf("Control really unlocked\n");
         }
 
@@ -212,6 +206,7 @@ void gestureReact()
         break;
     }
     gesture->lastGesture = xTaskGetTickCount();
+    xQueueSend(oscQueue, &osc, portMAX_DELAY);
 }
 
 void detectorTask(void *params)
@@ -253,7 +248,7 @@ void detectorTask(void *params)
                 int valid_samples = 0;
                 for (int i = 1; i < buf->head; i++)
                 {
-                    int64_t dt_ms = buf->samples[i].timestamp - buf->samples[i - 1].timestamp;
+                    int64_t dt_ms = (buf->samples[i].timestamp - buf->samples[i - 1].timestamp) / 1000000;
                     if (dt_ms > 0 && dt_ms < 1000)
                     {                             // reasonable sample interval (1ms to 1s)
                         dt_sum += dt_ms / 1000.0; // convert to seconds

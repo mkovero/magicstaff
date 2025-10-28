@@ -4,7 +4,7 @@
 #include <tinyosc.h>
 #include <FreeRTOS.h>
 #include <arpa/inet.h>
-
+#include <time.h>
 #define BUFFER_SIZE_BYTES 1024
 #define MAX_TOKENS 128
 
@@ -29,6 +29,13 @@ typedef struct
     struct sockaddr_in addr;
 } UdpPacket;
 
+typedef struct
+{
+    uint8_t buf[32];
+    size_t len;
+    struct sockaddr_in addr;
+} smallUdpPacket;
+
 typedef enum
 {
     GAMERGB,
@@ -36,6 +43,7 @@ typedef enum
     CTRLRIGHT,
     CTRLBOTH
 } oscType;
+
 
 typedef struct
 {
@@ -84,6 +92,15 @@ typedef struct
     oscType type;
     uint32_t delay;
 } oscSample;
+typedef struct
+{
+    const char *pathR;
+    const char *pathG;
+    const char *pathB;
+    uint8_t onvalue;
+    uint8_t offvalue;
+    colorSample color;
+} oscFixture;
 
 typedef struct
 {
@@ -99,10 +116,23 @@ typedef struct
     int head; // next write position
 } SensorBuffer;
 
-static inline void udp_send(UdpPacket *pkt, int sockfd)
+static inline void udp_send(smallUdpPacket *pkt, int sockfd)
 {
     sendto(sockfd, pkt->buf, pkt->len, 0,
            (struct sockaddr *)&pkt->addr, sizeof(pkt->addr));
+}
+
+static inline int64_t get_current_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts); // Use monotonic time for relative measurements
+    return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+}
+static inline int64_t get_current_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);  // high-resolution monotonic clock
+    return ts.tv_sec * 1000000LL + ts.tv_nsec / 1000LL;
 }
 
 void udpRX(void *pvParameters);

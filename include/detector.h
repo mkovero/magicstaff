@@ -42,9 +42,9 @@ typedef enum
     NOTKNOWN
 } Direction;
 
-#define MAXITEMS 1 // 0..1..
-#define CUTOFF 0.2f     // Hz
-#define THRESH 4.0f     // g units (filter out gentle movements)
-#define MIN_LEN 3       // min consecutive samples for gesture (reduced for faster detection)
+#define MAXITEMS 2 // 0..1..
+#define CUTOFF 0.4f     // Hz
+#define THRESH 5.0f     // g units (filter out gentle movements)
+#define MIN_LEN 5       // min consecutive samples for gesture (reduced for faster detection)
 
 #endif
