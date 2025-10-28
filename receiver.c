@@ -106,13 +106,17 @@ void jsonTask(void *pvParameters)
         {
             oscSample osc;
             colorSample color;
-
-            color.r = scale_to_8bit(values[0], 0.6, true);
-            color.g = scale_to_8bit(values[1], 0.6, true);
+ //    printf("Received %.2f/%.2f/%.2f ", values[0], values[1], values[2]);
+ 
+            color.r = scale_to_8bit(values[0], 0.4, true);
+            color.g = scale_to_8bit(values[1], 0.8, true);
             color.b = scale_to_8bit(values[2], 0.6, true);
             osc.color = color;
             osc.type = GAMERGB;
             osc.delay = 200;
+
+          //      printf("converted to %d/%d/%d\n", color.r, color.g, color.b);
+
             if (oscQueue != NULL)
             {
                 xQueueSend(oscQueue, &osc, portMAX_DELAY);

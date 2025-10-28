@@ -35,15 +35,17 @@ void osc_send(oscFixture *fixture)
 {
     smallUdpPacket txOscBundle;
     memset(&txOscBundle, 0, sizeof(txOscBundle));
-    txOscBundle.addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    txOscBundle.addr.sin_addr.s_addr = inet_addr("192.168.9.131");
     txOscBundle.addr.sin_port = htons(7700);
     txOscBundle.addr.sin_family = AF_INET;
+    tosc_bundle bundle;
 
-    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), fixture->pathR, "i", fixture->color.r);
-    udp_send(&txOscBundle, fixture->sockfd);
-    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), fixture->pathG, "i", fixture->color.g);
-    udp_send(&txOscBundle, fixture->sockfd);
-    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), fixture->pathB, "i", fixture->color.b);
+    tosc_writeBundle(&bundle, TINYOSC_TIMETAG_IMMEDIATELY, txOscBundle.buf, sizeof(txOscBundle.buf));
+    tosc_writeNextMessage(&bundle, fixture->pathR, "i", fixture->color.r);
+    tosc_writeNextMessage(&bundle, fixture->pathG, "i", fixture->color.g);
+    tosc_writeNextMessage(&bundle, fixture->pathB, "i", fixture->color.b);
+    txOscBundle.len = tosc_getBundleLength(&bundle); // msg_size is reported to be 1
+    //printf("Asked to send %d/%d/%d\n", fixture->color.r, fixture->color.g, fixture->color.b);
     udp_send(&txOscBundle, fixture->sockfd);
 }
 void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture *fixture)
@@ -69,7 +71,7 @@ void light_on_cb(oscFixture *fixture)
     fixture->color.b = fixture->onvalue;
 
     osc_send(fixture);
-    schedule_osc_event(200000, light_off_cb, fixture); // off after 200 ms
+    schedule_osc_event(300000, light_off_cb, fixture); // off after 200 ms
 }
 
 void oscTask(void *pv)

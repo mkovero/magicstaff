@@ -33,7 +33,7 @@ typedef struct
 
 typedef struct
 {
-    uint8_t buf[32];
+    uint8_t buf[64];
     size_t len;
     struct sockaddr_in addr;
 } smallUdpPacket;

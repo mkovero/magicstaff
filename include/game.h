@@ -173,7 +173,7 @@ inline static uint8_t scale_to_8bit(float value, float rng, bool use_abs)
         scaled = 0.0f;
     if (scaled > 255.0f)
         scaled = 255.0f;
-
+    
     return (uint8_t)lroundf(scaled);
 }
 
