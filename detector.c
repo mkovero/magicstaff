@@ -294,10 +294,10 @@ void detectorTask(void *params)
             {
                 if (tracking.above[i])
                 {
-                    if (!gesture.active)
+                    if (!atomic_load(&gesture.active))
                     {
                         // Gesture started
-                        gesture.active = true;
+                        atomic_store(&gesture.active, true);
                         gesture.start_sample = gesture.total_samples + i;
                         gesture.above_count = 1;
                         gesture.history_count = 0;
@@ -322,13 +322,13 @@ void detectorTask(void *params)
                 }
                 else
                 {
-                    if (gesture.active)
+                    if (atomic_load(&gesture.active))
                     {
                         if (gesture.above_count >= MIN_LEN)
                         {
                             gestureReact();
                         }
-                        gesture.active = false;
+                        atomic_store(&gesture.active, false);
                         gesture.above_count = 0;
                         gesture.history_count = 0;
                     }
@@ -338,10 +338,10 @@ void detectorTask(void *params)
             gesture.total_samples += samples_to_process;
 
             // Check if there's an ongoing gesture that needs to be completed
-            if (gesture.active && gesture.above_count >= MIN_LEN)
+            if (atomic_load(&gesture.active) && gesture.above_count >= MIN_LEN)
             {
                 gestureReact();
-                gesture.active = false;
+                atomic_store(&gesture.active, false);
                 gesture.above_count = 0;
                 gesture.history_count = 0;
             }

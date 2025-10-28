@@ -35,7 +35,7 @@ void osc_send(oscFixture *fixture)
 {
     smallUdpPacket txOscBundle;
     memset(&txOscBundle, 0, sizeof(txOscBundle));
-    txOscBundle.addr.sin_addr.s_addr = inet_addr("192.168.9.131");
+    txOscBundle.addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     txOscBundle.addr.sin_port = htons(7700);
     txOscBundle.addr.sin_family = AF_INET;
 
@@ -120,6 +120,9 @@ void oscTask(void *pv)
         fixture[x].onvalue = 255;
         fixture[x].offvalue = 0;
         fixture[x].sockfd = sockfd;
+        fixture[x].color.r = 0;
+        fixture[x].color.g = 0;
+        fixture[x].color.b = 0;
         fixture[x].oldColor.r = 0;
         fixture[x].oldColor.g = 0;
         fixture[x].oldColor.b = 0;
@@ -139,8 +142,11 @@ void oscTask(void *pv)
             case GAMERGB:
                 if (!atomic_load(&gesture->locked))
                 {
-                    fixture[item].color = osc.color;
-                    osc_send(&fixture[item]);
+                    if (!atomic_load(&gesture->active))
+                    {
+                        fixture[item].color = osc.color;
+                        osc_send(&fixture[item]);
+                    }
                 }
                 break;
             case CTRLLEFT:

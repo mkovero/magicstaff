@@ -64,7 +64,7 @@ typedef struct
     atomic_bool locked;
     bool reallyLocked;
     atomic_uintmax_t item;
-    bool active;
+    atomic_bool active;
     int start_sample;
     int above_count;
     float ax_history[HISTORY_SIZE];
