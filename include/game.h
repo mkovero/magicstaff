@@ -302,4 +302,56 @@ static colorSample gyroColor(float values[3])
     return color;
 }
 
+inline static float dtw_distance(SensorSample *A, int N, SensorSample*B, int M) {
+    float D[N][M];
+
+    for (int i=0; i<N; i++) {
+        for (int j=0; j<M; j++) {
+            float dx = A[i].values[0] - B[j].values[0];
+            float dy = A[i].values[1] - B[j].values[1];
+            float dz = A[i].values[2] - B[j].values[2];
+            float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+
+            if (i==0 && j==0) D[i][j] = dist;
+            else if (i==0)    D[i][j] = dist + D[i][j-1];
+            else if (j==0)    D[i][j] = dist + D[i-1][j];
+            else {
+                float min_prev = fminf(D[i-1][j], fminf(D[i][j-1], D[i-1][j-1]));
+                D[i][j] = dist + min_prev;
+            }
+        }
+    }
+
+    return D[N-1][M-1] / (N + M);
+}
+inline static void resample(SensorSample*src, size_t src_len, SensorSample *dst, size_t dst_len) {
+    for (size_t i = 0; i < dst_len; ++i) {
+        float t = (float)i * (src_len-1) / (dst_len-1);
+        size_t idx = (size_t)t;
+        float frac = t - idx;
+        if (idx + 1 < src_len) {
+            dst[i].values[0] = src[idx].values[0] * (1-frac) + src[idx+1].values[0] * frac;
+            dst[i].values[1] = src[idx].values[1] * (1-frac) + src[idx+1].values[1] * frac;
+            dst[i].values[2] = src[idx].values[2] * (1-frac) + src[idx+1].values[2] * frac;
+        } else {
+            dst[i] = src[src_len-1];
+        }
+    }
+}
+inline static void print_sensor_sample_array(SensorSample *samples, size_t len, const char *name) {
+    printf("SensorSample %s[%zu] = {\n", name, len);
+    for (size_t i = 0; i < len; i++) {
+        printf("    { %u, %lld, %lld, { ", 
+               samples[i].type, 
+               (long long)samples[i].timestamp, 
+               (long long)samples[i].received_ms);
+
+        for (int j = 0; j < VECTOR_SIZE; j++) {
+            printf("%.6ff%s", samples[i].values[j], (j < VECTOR_SIZE-1) ? ", " : "");
+        }
+
+        printf(" } }%s\n", (i < len-1) ? "," : "");
+    }
+    printf("};\n");
+}
 #endif

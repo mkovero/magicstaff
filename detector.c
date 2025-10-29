@@ -9,11 +9,14 @@
 #include <stdlib.h>
 #include "detector.h"
 #include <time.h>
+#include <game.h>
 extern QueueHandle_t accelQueue;
 extern QueueHandle_t oscQueue;
 extern QueueHandle_t gestureQueue;
 
 extern gestureState gesture;
+
+//#define MAX_RECORD_GESTURE 256
 
 static Direction classify_gesture(float *ax, float *ay, int start, int end)
 {
@@ -133,7 +136,6 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
     }
 }
 
-
 void gestureReact()
 {
     TickType_t currentTime = xTaskGetTickCount();
@@ -153,7 +155,7 @@ void gestureReact()
             {
                 item--;
             }
-            atomic_store(&gesture->item, item);   // write
+            atomic_store(&gesture->item, item); // write
             osc.type = CTRLLEFT;
         }
         break;
@@ -164,11 +166,20 @@ void gestureReact()
             {
                 item++;
             }
-            atomic_store(&gesture->item, item);   // write
+            atomic_store(&gesture->item, item); // write
             osc.type = CTRLRIGHT;
         }
         break;
     case DOWN:
+        if (!gesture->reallyLocked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown))
+        {
+            if (atomic_load(&gesture->locked))
+            {
+                atomic_store(&gesture->locked, false);
+                osc.type = CTRLBOTH;
+                printf("Control unlocked\n");
+            }
+        }
         break;
     case UP:
         if (!gesture->reallyLocked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown))
@@ -178,12 +189,6 @@ void gestureReact()
                 atomic_store(&gesture->locked, true);
                 osc.type = CTRLBOTH;
                 printf("Control locked\n");
-            }
-            else
-            {
-                atomic_store(&gesture->locked, false);
-                osc.type = CTRLBOTH;
-                printf("Control unlocked\n");
             }
         }
         break;
@@ -213,7 +218,11 @@ void detectorTask(void *params)
 {
     SensorBuffer *buf;
     HighpassFilter fx, fy, fz;
-
+    //bool recording = false;
+    //uint32_t still_start = 0;
+    //size_t gesture_len = 0;
+    //SensorSample recordBuf[MAX_RECORD_GESTURE];
+    //SensorSample normalized[128];
     while (gestureQueue == NULL)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -277,12 +286,51 @@ void detectorTask(void *params)
                 tracking.mag[i] = sqrtf(tracking.ax[i] * tracking.ax[i] + tracking.ay[i] * tracking.ay[i] + tracking.az[i] * tracking.az[i]);
                 tracking.above[i] = (tracking.mag[i] > THRESH) ? 1 : 0;
 
-                // Debug: show magnitude values for first few samples (only when debugging)
-                // if (i < 3) {
-                //     printf("Sample %d: ax=%.3f, ay=%.3f, az=%.3f, mag=%.3f, above=%d (threshold=%.3f)\n",
-                //            i, ax[i], ay[i], az[i], mag[i], above[i], THRESH);
-                // }
+            /*    if (!recording && tracking.mag[i] > 1.2f)
+                {
+                    recording = true;
+                    gesture_len = 0;
+                    still_start = 0;
+                    printf("Recording start (tracking mag %.2f)\n", tracking.mag[i]);
+                }
+                if (recording)
+                {
+                    if (gesture_len < MAX_RECORD_GESTURE)
+                    {
+                        recordBuf[gesture_len++] = buf->samples[i];
+                    }
+                    if (tracking.mag[i] < 0.8f)
+                    {
+                        if (!still_start)
+                        {
+                            still_start = now_ms;
+                        }
+                        else if (now_ms - still_start > 500)
+                        {
+                            recording = false;
+                            printf("Recording ended with len %zu (tracking mag %.2f)\n", gesture_len, tracking.mag[i]);
+                            resample(recordBuf, gesture_len, normalized, 64);
+                            float distance = dtw_distance(normalized, 64, template, 64);
+                            if (distance < 1.2)
+                            {
+                                printf("Pretty sure its a circle\n");
+                            }
+                                printf("Distance is %.2f\n", dtw_distance(normalized, 64, template, 64));
+                            //  print_sensor_sample_array(normalized, 64, "template");
+                            //    recognize_gesture(recordBuf, gesture_len);
+                        }
+                    }
+                    else
+                    {
+                        still_start = 0;
+                    }
+                }*/
             }
+            // Debug: show magnitude values for first few samples (only when debugging)
+            // if (i < 3) {
+            //     printf("Sample %d: ax=%.3f, ay=%.3f, az=%.3f, mag=%.3f, above=%d (threshold=%.3f)\n",
+            //            i, ax[i], ay[i], az[i], mag[i], above[i], THRESH);
+            // }
 
             // Simple gesture detection for each sample above threshold
 
