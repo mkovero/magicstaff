@@ -16,9 +16,9 @@ extern QueueHandle_t gestureQueue;
 
 extern gestureState gesture;
 
-//#define MAX_RECORD_GESTURE 256
+// #define MAX_RECORD_GESTURE 256
 
-static Direction classify_gesture(float *ax, float *ay, int start, int end)
+static Direction classify_gesture(SensorSample *history, int start, int end)
 {
     if (end <= start)
         return NOTKNOWN;
@@ -28,48 +28,65 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
         return NOTKNOWN;
 
     // Calculate statistics for better classification
-    float ax_sum = 0.0f, ay_sum = 0.0f;
-    float ax_min = ax[start], ax_max = ax[start];
-    float ay_min = ay[start], ay_max = ay[start];
-    float ax_variance = 0.0f, ay_variance = 0.0f;
+    float ax_sum = 0.0f, ay_sum = 0.0f, az_sum = 0.0f;
+    float ax_min = history[start].values[0], ax_max = history[start].values[0];
+    float ay_min = history[start].values[1], ay_max = history[start].values[1];
+    float az_min = history[start].values[2], az_max = history[start].values[2];
+
+    float ax_variance = 0.0f, ay_variance = 0.0f, az_variance = 0.0f;
 
     // First pass: calculate mean, min, max
     for (int i = start; i < end; i++)
     {
-        ax_sum += ax[i];
-        ay_sum += ay[i];
+        ax_sum += history[i].values[0];
+        ay_sum += history[i].values[1];
+        az_sum += history[i].values[2];
 
-        if (ax[i] < ax_min)
-            ax_min = ax[i];
-        if (ax[i] > ax_max)
-            ax_max = ax[i];
-        if (ay[i] < ay_min)
-            ay_min = ay[i];
-        if (ay[i] > ay_max)
-            ay_max = ay[i];
+        if (history[i].values[0] < ax_min)
+            ax_min = history[i].values[0];
+        if (history[i].values[0] > ax_max)
+            ax_max = history[i].values[0];
+        if (history[i].values[1] < ay_min)
+            ay_min = history[i].values[1];
+        if (history[i].values[1] > ay_max)
+            ay_max = history[i].values[1];
+        if (history[i].values[2] < az_min)
+            az_min = history[i].values[2];
+        if (history[i].values[2] > az_max)
+            az_max = history[i].values[2];
     }
 
     float ax_mean = ax_sum / count;
     float ay_mean = ay_sum / count;
+    float az_mean = az_sum / count;
 
     // Second pass: calculate variance
     for (int i = start; i < end; i++)
     {
-        float ax_diff = ax[i] - ax_mean;
-        float ay_diff = ay[i] - ay_mean;
+        float ax_diff = history[i].values[0] - ax_mean;
+        float ay_diff = history[i].values[1] - ay_mean;
+        float az_diff = history[i].values[2] - az_mean;
+
         ax_variance += ax_diff * ax_diff;
         ay_variance += ay_diff * ay_diff;
+        az_variance += az_diff * az_diff;
     }
     ax_variance /= count;
     ay_variance /= count;
+    az_variance /= count;
 
     // Calculate ranges and magnitudes
     float x_range = ax_max - ax_min;
     float y_range = ay_max - ay_min;
+    float z_range = az_max - az_min;
+
     float x_magnitude = fabsf(ax_mean);
     float y_magnitude = fabsf(ay_mean);
+    float z_magnitude = fabsf(az_mean);
+
     float x_stddev = sqrtf(ax_variance);
     float y_stddev = sqrtf(ay_variance);
+    float z_stddev = sqrtf(az_variance);
 
     // Improved classification logic (verbose analysis disabled for cleaner output)
     // printf("Gesture analysis: x_range=%.3f, y_range=%.3f, x_mag=%.3f, y_mag=%.3f, x_std=%.3f, y_std=%.3f\n",
@@ -78,6 +95,7 @@ static Direction classify_gesture(float *ax, float *ay, int start, int end)
     // Determine dominant axis based on both range and magnitude
     float x_dominance = x_range * x_magnitude;
     float y_dominance = y_range * y_magnitude;
+    float z_dominance = z_range * z_dominance;
 
     // Minimum threshold to avoid noise
     const float MIN_THRESHOLD = 0.5f;
@@ -140,11 +158,12 @@ void gestureReact()
 {
     TickType_t currentTime = xTaskGetTickCount();
     static uint8_t item = 0;
+
     gestureState *gesture;
     xQueuePeek(gestureQueue, &gesture, portMAX_DELAY);
     oscSample osc;
     osc.delay = 200;
-    Direction direction = classify_gesture(gesture->ax_history, gesture->ay_history, 0, gesture->history_count);
+    Direction direction = classify_gesture(gesture->history, 0, gesture->history_count);
     // Gesture is still active and long enough - classify it
     switch (direction)
     {
@@ -218,11 +237,7 @@ void detectorTask(void *params)
 {
     SensorBuffer *buf;
     HighpassFilter fx, fy, fz;
-    //bool recording = false;
-    //uint32_t still_start = 0;
-    //size_t gesture_len = 0;
-    //SensorSample recordBuf[MAX_RECORD_GESTURE];
-    //SensorSample normalized[128];
+
     while (gestureQueue == NULL)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -232,7 +247,7 @@ void detectorTask(void *params)
 
     // Gesture tracking state (persistent across processing cycles)
 
-    trackingStats tracking;
+    historySample tracking[BUFFER_SIZE];
 
     static gestureState gesture = {
         .lastGesture = 0,
@@ -240,6 +255,7 @@ void detectorTask(void *params)
         .locked = false,
         .reallyLocked = false,
         .item = 0,
+        .still_time = 500,
     };
     gestureState *ptr = &gesture;
     xQueueSend(gestureQueue, &ptr, portMAX_DELAY);
@@ -268,7 +284,7 @@ void detectorTask(void *params)
                 {
                     fs = valid_samples / dt_sum;
                 }
-                //   printf("Estimated sampling frequency: %.2f Hz (from %d valid intervals)\n", fs, valid_samples);
+                printf("Estimated sampling frequency: %.2f Hz (from %d valid intervals)\n", fs, valid_samples);
             }
 
             // Initialize filters
@@ -279,69 +295,16 @@ void detectorTask(void *params)
             // Filter samples & compute magnitude
             for (int i = 0; i < buf->head; i++)
             {
-                tracking.ax[i] = HighpassFilter_Update(&fx, buf->samples[i].values[0]);
-                tracking.ay[i] = HighpassFilter_Update(&fy, buf->samples[i].values[1]);
-                tracking.az[i] = HighpassFilter_Update(&fz, buf->samples[i].values[2]);
+                tracking[i].data.values[0] = HighpassFilter_Update(&fx, buf->samples[i].values[0]);
+                tracking[i].data.values[1] = HighpassFilter_Update(&fy, buf->samples[i].values[1]);
+                tracking[i].data.values[2] = HighpassFilter_Update(&fz, buf->samples[i].values[2]);
 
-                tracking.mag[i] = sqrtf(tracking.ax[i] * tracking.ax[i] + tracking.ay[i] * tracking.ay[i] + tracking.az[i] * tracking.az[i]);
-                tracking.above[i] = (tracking.mag[i] > THRESH) ? 1 : 0;
+                tracking[i].mag = sqrtf(tracking[i].data.values[0] * tracking[i].data.values[0] + tracking[i].data.values[1] * tracking[i].data.values[1] + tracking[i].data.values[2] * tracking[i].data.values[2]);
+                tracking[i].above = (tracking[i].mag > THRESH) ? 1 : 0;
 
-            /*    if (!recording && tracking.mag[i] > 1.2f)
+                if (tracking[i].above)
                 {
-                    recording = true;
-                    gesture_len = 0;
-                    still_start = 0;
-                    printf("Recording start (tracking mag %.2f)\n", tracking.mag[i]);
-                }
-                if (recording)
-                {
-                    if (gesture_len < MAX_RECORD_GESTURE)
-                    {
-                        recordBuf[gesture_len++] = buf->samples[i];
-                    }
-                    if (tracking.mag[i] < 0.8f)
-                    {
-                        if (!still_start)
-                        {
-                            still_start = now_ms;
-                        }
-                        else if (now_ms - still_start > 500)
-                        {
-                            recording = false;
-                            printf("Recording ended with len %zu (tracking mag %.2f)\n", gesture_len, tracking.mag[i]);
-                            resample(recordBuf, gesture_len, normalized, 64);
-                            float distance = dtw_distance(normalized, 64, template, 64);
-                            if (distance < 1.2)
-                            {
-                                printf("Pretty sure its a circle\n");
-                            }
-                                printf("Distance is %.2f\n", dtw_distance(normalized, 64, template, 64));
-                            //  print_sensor_sample_array(normalized, 64, "template");
-                            //    recognize_gesture(recordBuf, gesture_len);
-                        }
-                    }
-                    else
-                    {
-                        still_start = 0;
-                    }
-                }*/
-            }
-            // Debug: show magnitude values for first few samples (only when debugging)
-            // if (i < 3) {
-            //     printf("Sample %d: ax=%.3f, ay=%.3f, az=%.3f, mag=%.3f, above=%d (threshold=%.3f)\n",
-            //            i, ax[i], ay[i], az[i], mag[i], above[i], THRESH);
-            // }
-
-            // Simple gesture detection for each sample above threshold
-
-            // Process samples in the buffer
-            int samples_to_process = buf->head;
-            // Processing batch silently
-            // Sliding window gesture detection across processing cycles
-            for (int i = 0; i < samples_to_process; i++)
-            {
-                if (tracking.above[i])
-                {
+                    gesture.still_start = 0;
                     if (!atomic_load(&gesture.active))
                     {
                         // Gesture started
@@ -349,8 +312,8 @@ void detectorTask(void *params)
                         gesture.start_sample = gesture.total_samples + i;
                         gesture.above_count = 1;
                         gesture.history_count = 0;
-                        // printf("🎬 Gesture started at sample %ld (mag=%.3f)\n",
-                        //      total_samples + i, mag[i]);
+                        printf("🎬 Gesture started at sample %ld (mag=%.3f)\n",
+                               gesture.total_samples + i, tracking[i].mag);
                     }
                     else
                     {
@@ -363,19 +326,26 @@ void detectorTask(void *params)
                     // Store this sample in history (rolling buffer)
                     if (gesture.history_count < HISTORY_SIZE)
                     {
-                        gesture.ax_history[gesture.history_count] = tracking.ax[i];
-                        gesture.ay_history[gesture.history_count] = tracking.ay[i];
+                        gesture.history[gesture.history_count] = tracking[i].data;
                         gesture.history_count++;
                     }
                 }
                 else
                 {
-                    if (atomic_load(&gesture.active))
+                    if (!gesture.still_start)
                     {
-                        if (gesture.above_count >= MIN_LEN)
+                        gesture.still_start = now_ms;
+                    }
+                    if (atomic_load(&gesture.active) && gesture.above_count >= MIN_LEN && ((now_ms - gesture.still_start) > gesture.still_time))
+                    {
+                        gestureReact();
+                        resample(gesture.history, gesture.history_count, gesture.normalized, HISTORY_SIZE);
+                        float distance = dtw_distance(gesture.normalized, 64, template, 64);
+                        if (distance < 1.2)
                         {
-                            gestureReact();
+                            printf("Pretty sure its a circle\n");
                         }
+                        printf("Distance is %.2f count %d\n", distance, gesture.history_count);
                         atomic_store(&gesture.active, false);
                         gesture.above_count = 0;
                         gesture.history_count = 0;
@@ -383,35 +353,12 @@ void detectorTask(void *params)
                 }
             }
 
-            gesture.total_samples += samples_to_process;
+            gesture.total_samples += buf->head;
 
             // Check if there's an ongoing gesture that needs to be completed
-            if (atomic_load(&gesture.active) && gesture.above_count >= MIN_LEN)
-            {
-                gestureReact();
-                atomic_store(&gesture.active, false);
-                gesture.above_count = 0;
-                gesture.history_count = 0;
-            }
 
             // Reset buffer for next batch (this is a circular buffer, so we reset head)
             buf->head = 0;
-
-            // Periodically show magnitude statistics for debugging
-            if (gesture.total_samples % 50 == 0 && gesture.total_samples > 0)
-            {
-                float max_mag = 0.0f;
-                int above_count = 0;
-                for (int i = 0; i < samples_to_process; i++)
-                {
-                    if (tracking.mag[i] > max_mag)
-                        max_mag = tracking.mag[i];
-                    if (tracking.above[i])
-                        above_count++;
-                }
-                // printf("📊 Stats: max_mag=%.3f, above_threshold=%d/%d, threshold=%.3f\n",
-                //      max_mag, above_count, samples_to_process, THRESH);
-            }
         }
     }
 }

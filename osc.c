@@ -144,11 +144,8 @@ void oscTask(void *pv)
             case GAMERGB:
                 if (!atomic_load(&gesture->locked))
                 {
-                    if (!atomic_load(&gesture->active))
-                    {
-                        fixture[item].color = osc.color;
-                        osc_send(&fixture[item]);
-                    }
+                    fixture[item].color = osc.color;
+                    osc_send(&fixture[item]);
                 }
                 break;
             case CTRLLEFT:
