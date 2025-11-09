@@ -18,89 +18,106 @@ extern gestureState gesture;
 
 // #define MAX_RECORD_GESTURE 256
 
-static Direction classify_gesture(SensorSample *history, int start, int end)
+static SampleResult classify_gesture(SensorSample *history, int start, int end)
 {
+    SampleResult result = {
+        .ax_sum = 0.0f,
+        .ay_sum = 0.0f,
+        .az_sum = 0.0f,
+        .ax_variance = 0.0f,
+        .ay_variance = 0.0f,
+        .az_variance = 0.0f,
+        .ax_min = history[start].values[0],
+        .ax_max = history[start].values[0],
+        .ay_min = history[start].values[1],
+        .ay_max = history[start].values[1],
+        .az_min = history[start].values[2],
+        .az_max = history[start].values[2],
+
+    };
+
     if (end <= start)
-        return NOTKNOWN;
+    {
+        result.direction = NOTKNOWN;
+        return result;
+    }
 
     int count = end - start;
-    if (count < 3) // Need at least 3 samples for meaningful classification
-        return NOTKNOWN;
-
-    // Calculate statistics for better classification
-    float ax_sum = 0.0f, ay_sum = 0.0f, az_sum = 0.0f;
-    float ax_min = history[start].values[0], ax_max = history[start].values[0];
-    float ay_min = history[start].values[1], ay_max = history[start].values[1];
-    float az_min = history[start].values[2], az_max = history[start].values[2];
-
-    float ax_variance = 0.0f, ay_variance = 0.0f, az_variance = 0.0f;
+    if (count < 3)
+    {
+        result.direction = NOTKNOWN;
+        return result;
+    }
 
     // First pass: calculate mean, min, max
     for (int i = start; i < end; i++)
     {
-        ax_sum += history[i].values[0];
-        ay_sum += history[i].values[1];
-        az_sum += history[i].values[2];
+        result.ax_sum += history[i].values[0];
+        result.ay_sum += history[i].values[1];
+        result.az_sum += history[i].values[2];
 
-        if (history[i].values[0] < ax_min)
-            ax_min = history[i].values[0];
-        if (history[i].values[0] > ax_max)
-            ax_max = history[i].values[0];
-        if (history[i].values[1] < ay_min)
-            ay_min = history[i].values[1];
-        if (history[i].values[1] > ay_max)
-            ay_max = history[i].values[1];
-        if (history[i].values[2] < az_min)
-            az_min = history[i].values[2];
-        if (history[i].values[2] > az_max)
-            az_max = history[i].values[2];
+        if (history[i].values[0] < result.ax_min)
+            result.ax_min = history[i].values[0];
+        if (history[i].values[0] > result.ax_max)
+            result.ax_max = history[i].values[0];
+        if (history[i].values[1] < result.ay_min)
+            result.ay_min = history[i].values[1];
+        if (history[i].values[1] > result.ay_max)
+            result.ay_max = history[i].values[1];
+        if (history[i].values[2] < result.az_min)
+            result.az_min = history[i].values[2];
+        if (history[i].values[2] > result.az_max)
+            result.az_max = history[i].values[2];
     }
 
-    float ax_mean = ax_sum / count;
-    float ay_mean = ay_sum / count;
-    float az_mean = az_sum / count;
+    result.ax_mean = result.ax_sum / count;
+    result.ay_mean = result.ay_sum / count;
+    result.az_mean = result.az_sum / count;
 
     // Second pass: calculate variance
     for (int i = start; i < end; i++)
     {
-        float ax_diff = history[i].values[0] - ax_mean;
-        float ay_diff = history[i].values[1] - ay_mean;
-        float az_diff = history[i].values[2] - az_mean;
+        result.ax_diff = history[i].values[0] - result.ax_mean;
+        result.ay_diff = history[i].values[1] - result.ay_mean;
+        result.az_diff = history[i].values[2] - result.az_mean;
 
-        ax_variance += ax_diff * ax_diff;
-        ay_variance += ay_diff * ay_diff;
-        az_variance += az_diff * az_diff;
+        result.ax_variance += result.ax_diff * result.ax_diff;
+        result.ay_variance += result.ay_diff * result.ay_diff;
+        result.az_variance += result.az_diff * result.az_diff;
     }
-    ax_variance /= count;
-    ay_variance /= count;
-    az_variance /= count;
+    result.ax_variance /= count;
+    result.ay_variance /= count;
+    result.az_variance /= count;
 
     // Calculate ranges and magnitudes
-    float x_range = ax_max - ax_min;
-    float y_range = ay_max - ay_min;
-    float z_range = az_max - az_min;
+    result.ax_range = result.ax_max - result.ax_min;
+    result.ay_range = result.ay_max - result.ay_min;
+    result.az_range = result.az_max - result.az_min;
 
-    float x_magnitude = fabsf(ax_mean);
-    float y_magnitude = fabsf(ay_mean);
-    float z_magnitude = fabsf(az_mean);
+    result.x_mag = fabsf(result.ax_mean);
+    result.y_mag = fabsf(result.ay_mean);
+    result.z_mag = fabsf(result.az_mean);
 
-    float x_stddev = sqrtf(ax_variance);
-    float y_stddev = sqrtf(ay_variance);
-    float z_stddev = sqrtf(az_variance);
+    result.x_std = sqrtf(result.ax_variance);
+    result.y_std = sqrtf(result.ay_variance);
+    result.z_std = sqrtf(result.az_variance);
 
     // Improved classification logic (verbose analysis disabled for cleaner output)
-    // printf("Gesture analysis: x_range=%.3f, y_range=%.3f, x_mag=%.3f, y_mag=%.3f, x_std=%.3f, y_std=%.3f\n",
-    //        x_range, y_range, x_magnitude, y_magnitude, x_stddev, y_stddev);
+    // printf("Gesture analysis: result.ax_range=%.3f, result.ay_range=%.3f, x_mag=%.3f, y_mag=%.3f, x_std=%.3f, y_std=%.3f\n",
+    //        result.ax_range, result.ay_range, result.x_mag, result.y_mag, x_stddev, y_stddev);
 
     // Determine dominant axis based on both range and magnitude
-    float x_dominance = x_range * x_magnitude;
-    float y_dominance = y_range * y_magnitude;
-    float z_dominance = z_range * z_dominance;
+    result.x_dom = result.ax_range * result.x_mag;
+    result.y_dom = result.ay_range * result.y_mag;
+    result.z_dom = result.az_range * result.z_mag;
 
     // Minimum threshold to avoid noise
     const float MIN_THRESHOLD = 0.5f;
-    if (x_dominance < MIN_THRESHOLD && y_dominance < MIN_THRESHOLD)
-        return WEAK;
+    if (result.x_dom < MIN_THRESHOLD && result.y_dom < MIN_THRESHOLD)
+    {
+        result.direction = WEAK;
+        return result;
+    }
 
     const float SHAKE_THRESHOLD = 250.0f;
     static uint8_t shakeCount = 0;
@@ -111,47 +128,60 @@ static Direction classify_gesture(SensorSample *history, int start, int end)
         shakeCount = 0;
     }
 
-    if (x_dominance > SHAKE_THRESHOLD || y_dominance > SHAKE_THRESHOLD)
+    if (result.x_dom > SHAKE_THRESHOLD || result.y_dom > SHAKE_THRESHOLD)
     {
         shakeCount++;
-        // printf("Shake detected (%d) %.2f/%.2f\n", shakeCount, x_dominance, y_dominance);
+        // printf("Shake detected (%d) %.2f/%.2f\n", shakeCount, result.x_dom, result.y_dom);
         lastShake = get_current_ms();
     }
     if (shakeCount > 3)
     {
         //    printf("Shake triggered\n");
         shakeCount = 0;
-        return SHAKE;
+        result.direction = SHAKE;
+        return result;
     }
     // Classify based on dominant axis and direction
-    if (x_dominance > y_dominance * 1.2f)
+    if (result.x_dom > result.y_dom * 1.2f)
     { // X-axis dominant (with some tolerance)
-        if (ax_mean > 0)
-            return RIGHT;
+        if (result.ax_mean > 0)
+        {
+            result.direction = RIGHT;
+            return result;
+        }
         else
-            return LEFT;
+        {
+            result.direction = LEFT;
+            return result;
+        }
     }
-    else if (y_dominance > x_dominance * 1.2f)
+    else if (result.y_dom > result.x_dom * 1.2f)
     { // Y-axis dominant
-        if (ay_mean > 0)
-            return UP;
+        if (result.ay_mean > 0)
+        {
+            result.direction = UP;
+            return result;
+        }
         else
-            return DOWN;
+        {
+            result.direction = DOWN;
+            return result;
+        }
     }
-    else
-    {
-        // Mixed or diagonal gesture
-        if (ax_mean > 0 && ay_mean > 0)
-            return UPRIGHT;
-        else if (ax_mean < 0 && ay_mean > 0)
-            return UPLEFT;
-        else if (ax_mean > 0 && ay_mean < 0)
-            return DOWNRIGHT;
-        else if (ax_mean < 0 && ay_mean < 0)
-            return DOWNLEFT;
-        else
-            return MIXED;
-    }
+    /* else
+     {
+         // Mixed or diagonal gesture
+         if (result.ax_mean > 0 && ay_mean > 0)
+             return UPRIGHT;
+         else if (result.ax_mean < 0 && ay_mean > 0)
+             return UPLEFT;
+         else if (result.ax_mean > 0 && ay_mean < 0)
+             return DOWNRIGHT;
+         else if (result.ax_mean < 0 && ay_mean < 0)
+             return DOWNLEFT;
+         else
+             return MIXED;
+     }*/
 }
 
 void gestureReact()
@@ -163,9 +193,10 @@ void gestureReact()
     xQueuePeek(gestureQueue, &gesture, portMAX_DELAY);
     oscSample osc;
     osc.delay = 200;
-    Direction direction = classify_gesture(gesture->history, 0, gesture->history_count);
+    SampleResult result = classify_gesture(gesture->history, 0, gesture->history_count);
+
     // Gesture is still active and long enough - classify it
-    switch (direction)
+    switch (result.direction)
     {
     case LEFT:
         if ((item >= 0) && atomic_load(&gesture->locked) && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)

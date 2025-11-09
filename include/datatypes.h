@@ -127,8 +127,6 @@ typedef struct
     int sockfd;
 } oscFixture;
 
-
-
 typedef struct
 {
     SensorSample samples[BUFFER_SIZE];
@@ -144,7 +142,20 @@ typedef struct
     oscFixture *data; // optional argument
 } OSC_Event;
 
-
+typedef struct
+{
+    float ax_sum, ay_sum, az_sum;
+    float ax_min, ay_min, az_min;
+    float ax_max, ay_max, az_max;
+    float ax_variance, ay_variance, az_variance;
+    float ax_mean, ay_mean, az_mean;
+    float ax_diff, ay_diff, az_diff;
+    float ax_range, ay_range, az_range;
+    float x_mag, y_mag, z_mag;
+    float x_std, y_std, z_std;
+    float x_dom, y_dom, z_dom;
+    Direction direction;
+} SampleResult;
 
 static inline void udp_send(smallUdpPacket *pkt, int sockfd)
 {
