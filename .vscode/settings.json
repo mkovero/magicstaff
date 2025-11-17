@@ -6,6 +6,7 @@
         "inet.h": "c",
         "stdlib.h": "c",
         "datatypes.h": "c",
-        "random": "c"
+        "random": "c",
+        "math.h": "c"
     }
 }

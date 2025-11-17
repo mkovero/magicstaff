@@ -1,6 +1,5 @@
 #ifndef DATATYPES_H
 #define DATATYPES_H
-#include <stdint.h>
 #include <tinyosc.h>
 #include <FreeRTOS.h>
 #include <arpa/inet.h>
@@ -23,6 +22,25 @@
 #define BUF_SIZE 512
 
 #define HISTORY_SIZE 64 // history of previous samples for sliding detection
+
+typedef enum
+{
+    RIGHT,
+    LEFT,
+    UP,
+    DOWN,
+    UPRIGHT,
+    UPLEFT,
+    DOWNRIGHT,
+    DOWNLEFT,
+    MIXED,
+    WEAK,
+    SHAKE,
+    PUSH,
+    PULL,
+    NOTKNOWN
+} Direction;
+
 
 typedef struct
 {
@@ -183,6 +201,7 @@ void gameTask(void *pv);
 void oscTask(void *pv);
 void jsonTask(void *pv);
 void oscEvent(void *pvParameters);
+void processSample(float x, float y, float z);
 static SensorSample template[64] = {
     {0, 0, 0, {0.515934f, 0.434529f, -1.315498f}},
     {0, 0, 0, {2.275398f, 1.309419f, -1.881936f}},

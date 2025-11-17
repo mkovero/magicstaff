@@ -118,7 +118,7 @@ static positionSample quaternion_to_euler_ypr(float x, float y, float z, float w
     double pitch = 0.0;
     // # pitch (y-axis rotation)
     double sinp = 2.0 * (w * y - z * x);
-    if (abs(sinp) >= 1)
+    if (fabs(sinp) >= 1.0)
     {
         pitch = copysign(PI / 2.0, sinp);
     }

@@ -1,3 +1,4 @@
+// ReSharper disable CppDFAEndlessLoop
 #include <datatypes.h>
 #include <FreeRTOS.h>
 #include <task.h>
@@ -48,12 +49,14 @@ uint32_t ulGetRunTimeCounterValue(void)
 }
 void MonitorTask(void *params)
 {
-    char stats[512];
     TaskHandle_t tasks[] = {udpRXHandle, jsonHandle, detectorHandle, oscHandle};
+    // ReSharper disable once CppTooWideScope
     const char *taskNames[] = {"udpRX", "json", "detector", "OSC"};
 
     for (;;)
     {
+        char stats[512];
+
         vTaskGetRunTimeStats(stats);
         printf("\n%s\n", stats);
 
@@ -67,7 +70,7 @@ void MonitorTask(void *params)
         for (int i = 0; i < 3; i++)
         {
             UBaseType_t water = uxTaskGetStackHighWaterMark(tasks[i]);
-            printf("%-15s %lu\n", taskNames[i], (unsigned)water);
+            printf("%-15s %u\n", taskNames[i], (unsigned)water);
         } /*
          size_t free_bytes = xPortGetFreeHeapSize();
          size_t min_ever_free = xPortGetMinimumEverFreeHeapSize();
