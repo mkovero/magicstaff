@@ -18,7 +18,9 @@ extern QueueHandle_t accelQueue;
 extern QueueHandle_t oscQueue;
 extern QueueHandle_t freeQueue;
 extern QueueHandle_t readyQueue;
+extern QueueHandle_t gestureQueue;
 
+extern gestureState gesture;
 // Parse JSON and store sample
 void jsonTask(void *pvParameters)
 {
@@ -35,6 +37,18 @@ void jsonTask(void *pvParameters)
         vTaskDelay(1000);
     }
     UdpPacket *pkt;
+
+        static gestureState gesture = {
+        .lastGesture = 0,
+        .gestureCooldown = 500,
+        .locked = false,
+        .reallyLocked = false,
+        .item = 0,
+        .still_time = 200,
+    };
+    gestureState *ptr = &gesture;
+    xQueueSend(gestureQueue, &ptr, portMAX_DELAY);
+
 
     printf("Json parser started\n");
 
@@ -128,7 +142,8 @@ void jsonTask(void *pvParameters)
         }
         else if (strcmp(type, "android.sensor.linear_acceleration") == 0)
         {
-            SensorSample *s = &a->samples[a->head];
+            processSample(values[0], values[1], values[2]);
+           /* SensorSample *s = &a->samples[a->head];
 
             s->received_ms = get_current_ms();
             s->timestamp = timestamp / 1000000; // convert ns → ms
@@ -146,7 +161,7 @@ void jsonTask(void *pvParameters)
             else
             {
                 printf("accelQueue is NULL, send failed\n");
-            }
+            }*/
         }
         else
         {
