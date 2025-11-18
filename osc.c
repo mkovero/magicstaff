@@ -7,8 +7,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <game.h>
 
 extern QueueHandle_t oscQueue;
+extern QueueHandle_t vectorQueue;
 extern QueueHandle_t gestureQueue;
 extern QueueHandle_t oscEventQueue;
 
@@ -45,7 +47,7 @@ void osc_send(oscFixture *fixture)
     tosc_writeNextMessage(&bundle, fixture->pathG, "i", fixture->color.g);
     tosc_writeNextMessage(&bundle, fixture->pathB, "i", fixture->color.b);
     txOscBundle.len = tosc_getBundleLength(&bundle); // msg_size is reported to be 1
-    //printf("Asked to send %d/%d/%d\n", fixture->color.r, fixture->color.g, fixture->color.b);
+    // printf("Asked to send %d/%d/%d\n", fixture->color.r, fixture->color.g, fixture->color.b);
     udp_send(&txOscBundle, fixture->sockfd);
 }
 void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture *fixture)
@@ -97,7 +99,11 @@ void oscTask(void *pv)
         vTaskDelay(pdMS_TO_TICKS(100));
     };
     gestureState *gesture;
-    xQueuePeek(gestureQueue, &gesture, portMAX_DELAY);
+    while (xQueuePeek(gestureQueue, &gesture, portMAX_DELAY) != pdPASS)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        printf(",\n");
+    }
 #define FIXTURE_COUNT 4
     oscFixture fixture[FIXTURE_COUNT];
     fixture[0].pathR = "/r";
@@ -133,20 +139,30 @@ void oscTask(void *pv)
     {
         oscSample osc;
         uint32_t msg_size = 0;
-        if (xQueueReceive(oscQueue, &osc, portMAX_DELAY))
+        colorSample color;
+        //    printf("Received %.2f/%.2f/%.2f ", values[0], values[1], values[2]);
+        SensorSample v;
+        atomic_uintmax_t item = atomic_load(&gesture->item); // read
+
+        if (xQueueReceive(vectorQueue, &v, 0))
         {
-            uint8_t item = atomic_load(&gesture->item); // read
+            if (!atomic_load(&gesture->locked))
+            {
+                fixture[item].color.r = scale_to_8bit(v.values[0], 0.4, true);
+                fixture[item].color.g = scale_to_8bit(v.values[1], 0.8, true);
+                fixture[item].color.b = scale_to_8bit(v.values[2], 0.6, true);
+                osc_send(&fixture[item]);
+            }
+        }
+        if (xQueueReceive(oscQueue, &osc, 0))
+        {
 
             // printf("Received OSC control with type %d delay %d and item %d\n",osc.type, osc.delay, osc.item);
             switch (osc.type)
             {
                 oscData data;
             case GAMERGB:
-                if (!atomic_load(&gesture->locked))
-                {
-                    fixture[item].color = osc.color;
-                    osc_send(&fixture[item]);
-                }
+
                 break;
             case CTRLLEFT:
                 light_on_cb(&fixture[item]);
@@ -167,7 +183,7 @@ void oscTask(void *pv)
             }
             oscSent++;
         }
-        //  vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
     close(sockfd);
 }

@@ -14,41 +14,21 @@
 #include <time.h>
 #include <game.h>
 
-extern QueueHandle_t accelQueue;
 extern QueueHandle_t oscQueue;
 extern QueueHandle_t freeQueue;
 extern QueueHandle_t readyQueue;
-extern QueueHandle_t gestureQueue;
+extern QueueHandle_t vectorQueue;
+extern QueueHandle_t accelQueue;
 
-extern gestureState gesture;
 // Parse JSON and store sample
 void jsonTask(void *pvParameters)
 {
-    SensorBuffer *a = pvPortMalloc(sizeof(SensorBuffer));
-    a->head = 0;
-    while (accelQueue == NULL)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    };
-    xQueueSend(accelQueue, &a, portMAX_DELAY);
     //  xQueuePeek(accelQueue, &a, portMAX_DELAY);
     while (readyQueue == NULL)
     {
         vTaskDelay(1000);
     }
     UdpPacket *pkt;
-
-        static gestureState gesture = {
-        .lastGesture = 0,
-        .gestureCooldown = 500,
-        .locked = false,
-        .reallyLocked = false,
-        .item = 0,
-        .still_time = 200,
-    };
-    gestureState *ptr = &gesture;
-    xQueueSend(gestureQueue, &ptr, portMAX_DELAY);
-
 
     printf("Json parser started\n");
 
@@ -115,53 +95,44 @@ void jsonTask(void *pvParameters)
                 i += val->size; // skip nested tokens
             }
         }
+        SensorSample data;
+        memcpy(data.values, values, sizeof(data.values));
+
         // Dispatch to buffer
         if (strcmp(type, "android.sensor.game_rotation_vector") == 0)
         {
-            oscSample osc;
-            colorSample color;
- //    printf("Received %.2f/%.2f/%.2f ", values[0], values[1], values[2]);
- 
-            color.r = scale_to_8bit(values[0], 0.4, true);
-            color.g = scale_to_8bit(values[1], 0.8, true);
-            color.b = scale_to_8bit(values[2], 0.6, true);
-            osc.color = color;
-            osc.type = GAMERGB;
-            osc.delay = 200;
-
-          //      printf("converted to %d/%d/%d\n", color.r, color.g, color.b);
-
-            if (oscQueue != NULL)
+            if (vectorQueue != NULL)
             {
-                xQueueSend(oscQueue, &osc, portMAX_DELAY);
+                xQueueSend(vectorQueue, &data, 0);
             }
-            else
-            {
-                printf("oscQueue is NULL, send failed\n");
-            }
+            //      printf("converted to %d/%d/%d\n", color.r, color.g, color.b);
         }
         else if (strcmp(type, "android.sensor.linear_acceleration") == 0)
         {
-            processSample(values[0], values[1], values[2]);
-           /* SensorSample *s = &a->samples[a->head];
-
-            s->received_ms = get_current_ms();
-            s->timestamp = timestamp / 1000000; // convert ns → ms
-            s->type = LINEAR_ACCEL;
-
-            memcpy(s->values, values, sizeof(s->values));
-
-            a->head = (a->head + 1) % BUFFER_SIZE;
-
-            // Send buffer to detector task
             if (accelQueue != NULL)
             {
-                xQueueSend(accelQueue, &a, portMAX_DELAY);
+                xQueueSend(accelQueue, &data, 0);
             }
-            else
-            {
-                printf("accelQueue is NULL, send failed\n");
-            }*/
+
+            /* SensorSample *s = &a->samples[a->head];
+
+             s->received_ms = get_current_ms();
+             s->timestamp = timestamp / 1000000; // convert ns → ms
+             s->type = LINEAR_ACCEL;
+
+             memcpy(s->values, values, sizeof(s->values));
+
+             a->head = (a->head + 1) % BUFFER_SIZE;
+
+             // Send buffer to detector task
+             if (accelQueue != NULL)
+             {
+                 xQueueSend(accelQueue, &a, portMAX_DELAY);
+             }
+             else
+             {
+                 printf("accelQueue is NULL, send failed\n");
+             }*/
         }
         else
         {

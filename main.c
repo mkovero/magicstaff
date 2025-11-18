@@ -6,16 +6,16 @@
 #include <time.h>
 #include <stdio.h>
 
-QueueHandle_t gameQueue = NULL;
+QueueHandle_t vectorQueue = NULL;
 QueueHandle_t accelQueue = NULL;
+QueueHandle_t gestureQueue = NULL;
 QueueHandle_t oscQueue = NULL;
 QueueHandle_t oscEventQueue = NULL;
-QueueHandle_t gestureQueue = NULL;
 QueueHandle_t freeQueue = NULL;  // Holds pointers to free buffers
 QueueHandle_t readyQueue = NULL; // Holds pointers to filled buffers
 TaskHandle_t udpRXHandle = NULL;
 TaskHandle_t jsonHandle = NULL;
-TaskHandle_t detectorHandle = NULL;
+TaskHandle_t samplerHandle = NULL;
 TaskHandle_t oscHandle = NULL;
 TaskHandle_t oscEventHandle = NULL;
 
@@ -49,13 +49,13 @@ uint32_t ulGetRunTimeCounterValue(void)
 }
 void MonitorTask(void *params)
 {
-    TaskHandle_t tasks[] = {udpRXHandle, jsonHandle, detectorHandle, oscHandle};
+    TaskHandle_t tasks[] = {udpRXHandle, jsonHandle, oscHandle, samplerHandle};
     // ReSharper disable once CppTooWideScope
-    const char *taskNames[] = {"udpRX", "json", "detector", "OSC"};
+    const char *taskNames[] = {"udpRX", "json", "detector", "OSC", "Sampler"};
+        char stats[512];
 
     for (;;)
     {
-        char stats[512];
 
         vTaskGetRunTimeStats(stats);
         printf("\n%s\n", stats);
@@ -64,8 +64,8 @@ void MonitorTask(void *params)
         printf("Task Name       StackHighWater (words)\n");
         printf("-------------------------------------\n");
 
-        //   UBaseType_t water = uxTaskGetStackHighWaterMark(oscHandle);
-        // printf("water: %lu", (unsigned long)water);
+         //  UBaseType_t water = uxTaskGetStackHighWaterMark(oscHandle);
+         //printf("water: %lu", (unsigned long)water);
 
         for (int i = 0; i < 3; i++)
         {
@@ -104,6 +104,12 @@ void MonitorTask(void *params)
                    (unsigned int)uxQueueMessagesWaiting(accelQueue),
                    (unsigned int)uxQueueSpacesAvailable(accelQueue));
         }
+                if (vectorQueue != NULL)
+        {
+            printf("Queue vectorQueue length: %u / %u\n",
+                   (unsigned int)uxQueueMessagesWaiting(vectorQueue),
+                   (unsigned int)uxQueueSpacesAvailable(vectorQueue));
+        }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
@@ -115,7 +121,9 @@ void vApplicationIdleHook(void)
 
 int main()
 {
-    accelQueue = xQueueCreate(10, sizeof(SensorBuffer *));
+    accelQueue = xQueueCreate(10, sizeof(SensorSample));
+        vectorQueue = xQueueCreate(10, sizeof(SensorSample));
+
     oscQueue = xQueueCreate(10, sizeof(oscSample));
     oscEventQueue = xQueueCreate(64, sizeof(OSC_Event));
     gestureQueue = xQueueCreate(1, sizeof(gestureState *));
@@ -124,7 +132,7 @@ int main()
 
     xTaskCreate(udpRX, "Receiver", 6048, NULL, configMAX_PRIORITIES - 2, &udpRXHandle);
     xTaskCreate(jsonTask, "json parser", 1024, NULL, configMAX_PRIORITIES - 1, &jsonHandle);
-    xTaskCreate(detectorTask, "Detector", 1024, NULL, configMAX_PRIORITIES - 4, &detectorHandle);
+    xTaskCreate(sampler, "Sampler", 1024, NULL, configMAX_PRIORITIES - 2, &samplerHandle);
     xTaskCreate(oscTask, "OSC client", 1024, NULL, configMAX_PRIORITIES - 2, &oscHandle);
     xTaskCreate(oscEvent, "OSC event", 1024, NULL, configMAX_PRIORITIES - 2, &oscEventHandle);
 

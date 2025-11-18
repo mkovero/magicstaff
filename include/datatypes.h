@@ -201,7 +201,7 @@ void gameTask(void *pv);
 void oscTask(void *pv);
 void jsonTask(void *pv);
 void oscEvent(void *pvParameters);
-void processSample(float x, float y, float z);
+void sampler(void *pvParameters);
 static SensorSample template[64] = {
     {0, 0, 0, {0.515934f, 0.434529f, -1.315498f}},
     {0, 0, 0, {2.275398f, 1.309419f, -1.881936f}},
