@@ -41,7 +41,6 @@ typedef enum
     NOTKNOWN
 } Direction;
 
-
 typedef struct
 {
     uint8_t buf[BUF_SIZE];
@@ -95,16 +94,7 @@ typedef struct
     atomic_bool locked;
     bool reallyLocked;
     atomic_uintmax_t item;
-    atomic_bool active;
-    int start_sample;
-    int above_count;
-    SensorSample history[BUFFER_SIZE];
-    int history_count;
-    int total_samples;
-    uint32_t still_start;
-    uint32_t still_time;
-    SensorSample normalized[HISTORY_SIZE];
-
+    atomic_bool holding;
 } gestureState;
 
 typedef struct
@@ -143,6 +133,10 @@ typedef struct
     colorSample color;
     colorSample oldColor;
     int sockfd;
+    float quat[3];
+    bool virtualQuat;
+    bool oscInitialized;
+
 } oscFixture;
 
 typedef struct
@@ -151,13 +145,13 @@ typedef struct
     int head; // next write position
 } SensorBuffer;
 
-typedef void (*event_cb_t)(oscFixture *);
+typedef void (*event_cb_t)(oscFixture);
 
 typedef struct
 {
     int64_t target_us; // execution time in microseconds (monotonic)
     event_cb_t callback;
-    oscFixture *data; // optional argument
+    oscFixture data; // optional argument
 } OSC_Event;
 
 typedef struct

@@ -33,7 +33,7 @@ uint16_t qlc_crc16_x25(const char *path)
     return (uint16_t)(~crc);
 }
 
-void osc_send(oscFixture *fixture)
+void osc_send(oscFixture fixture)
 {
     smallUdpPacket txOscBundle;
     memset(&txOscBundle, 0, sizeof(txOscBundle));
@@ -43,14 +43,14 @@ void osc_send(oscFixture *fixture)
     tosc_bundle bundle;
 
     tosc_writeBundle(&bundle, TINYOSC_TIMETAG_IMMEDIATELY, txOscBundle.buf, sizeof(txOscBundle.buf));
-    tosc_writeNextMessage(&bundle, fixture->pathR, "i", fixture->color.r);
-    tosc_writeNextMessage(&bundle, fixture->pathG, "i", fixture->color.g);
-    tosc_writeNextMessage(&bundle, fixture->pathB, "i", fixture->color.b);
+    tosc_writeNextMessage(&bundle, fixture.pathR, "i", fixture.color.r);
+    tosc_writeNextMessage(&bundle, fixture.pathG, "i", fixture.color.g);
+    tosc_writeNextMessage(&bundle, fixture.pathB, "i", fixture.color.b);
     txOscBundle.len = tosc_getBundleLength(&bundle); // msg_size is reported to be 1
-    // printf("Asked to send %d/%d/%d\n", fixture->color.r, fixture->color.g, fixture->color.b);
-    udp_send(&txOscBundle, fixture->sockfd);
+    // printf("Asked to send %d/%d/%d\n", fixture.color.r, fixture.color.g, fixture.color.b);
+    udp_send(&txOscBundle, fixture.sockfd);
 }
-void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture *fixture)
+void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture fixture)
 {
     OSC_Event evt;
     evt.target_us = get_current_us() + delay_us;
@@ -59,18 +59,18 @@ void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture *fixture)
     xQueueSend(oscEventQueue, &evt, portMAX_DELAY);
 }
 
-void light_off_cb(oscFixture *fixture)
+void light_off_cb(oscFixture fixture)
 {
-    fixture->color = fixture->oldColor;
+    fixture.color = fixture.oldColor;
     osc_send(fixture);
 }
 
-void light_on_cb(oscFixture *fixture)
+void light_on_cb(oscFixture fixture)
 {
-    fixture->oldColor = fixture->color;
-    fixture->color.r = fixture->onvalue;
-    fixture->color.g = fixture->onvalue;
-    fixture->color.b = fixture->onvalue;
+    fixture.oldColor = fixture.color;
+    fixture.color.r = fixture.onvalue;
+    fixture.color.g = fixture.onvalue;
+    fixture.color.b = fixture.onvalue;
 
     osc_send(fixture);
     schedule_osc_event(300000, light_off_cb, fixture); // off after 200 ms
@@ -134,6 +134,11 @@ void oscTask(void *pv)
         fixture[x].oldColor.r = 0;
         fixture[x].oldColor.g = 0;
         fixture[x].oldColor.b = 0;
+        fixture[x].quat[0] = 0.0f;
+        fixture[x].quat[1] = 0.0f;
+        fixture[x].quat[2] = 0.0f;
+        fixture[x].virtualQuat = false;
+        fixture[x].oscInitialized = false;
     }
     while (1)
     {
@@ -148,10 +153,50 @@ void oscTask(void *pv)
         {
             if (!atomic_load(&gesture->locked))
             {
-                fixture[item].color.r = scale_to_8bit(v.values[0], 0.4, true);
-                fixture[item].color.g = scale_to_8bit(v.values[1], 0.8, true);
-                fixture[item].color.b = scale_to_8bit(v.values[2], 0.6, true);
-                osc_send(&fixture[item]);
+                if (!fixture[item].oscInitialized)
+                {
+                    memcpy(fixture[item].quat, v.values, sizeof(fixture[item].quat));
+                    fixture[item].oscInitialized = true;
+                }
+                float x_dist = sqrt(pow(v.values[0] - fixture[item].quat[0], 2));
+                float y_dist = sqrt(pow(v.values[1] - fixture[item].quat[1], 2));
+                float z_dist = sqrt(pow(v.values[2] - fixture[item].quat[2], 2));
+
+                float vx = v.values[0];
+                float vy = v.values[1];
+                float vz = v.values[2];
+                //            printf("[1 origin/virt %.2f/%.2f || %.2f/%.2f || %.2f/%.2f\n", v.values[0], vx, v.values[1], vy, v.values[2], vz);
+
+                if (vx >= 1.0f)
+                    vx = 1.0f;
+                if (vy >= 1.0f)
+                    vy = 1.0f;
+                if (vz >= 1.0f)
+                    vz = 1.0f;
+
+                if (vx <= -1.0f)
+                    vx = -1.0f;
+                if (vy <= -1.0f)
+                    vy = -1.0f;
+                if (vz <= -1.0f)
+                    vz = -1.0f;
+                //  printf("[1 origin/virt %.2f/%.2f || %.2f/%.2f || %.2f/%.2f\n", v.values[0], vx, v.values[1], vy, v.values[2], vz);
+                fixture[item].color.r = scale_to_8bit(vx, 0.4, true);
+                fixture[item].color.g = scale_to_8bit(vy, 0.8, true);
+                fixture[item].color.b = scale_to_8bit(vz, 0.6, true);
+                //   printf("[2 scaled/dist %d/%.2f || %d/%.2f || %d/%.2f\n", fixture[item].color.r, x_dist, fixture[item].color.g, y_dist, fixture[item].color.b, z_dist);
+
+                osc_send(fixture[item]);
+                //  if (fixture[item].virtualQuat)
+                //    fixture[item].virtualQuat = false;
+            }
+            else
+            {
+                if (!fixture[item].virtualQuat)
+                {
+                    memcpy(fixture[item].quat, v.values, sizeof(fixture[item].quat));
+                    fixture[item].virtualQuat = true;
+                }
             }
         }
         if (xQueueReceive(oscQueue, &osc, 0))
@@ -165,16 +210,16 @@ void oscTask(void *pv)
 
                 break;
             case CTRLLEFT:
-                light_on_cb(&fixture[item]);
+                light_on_cb(fixture[item]);
                 break;
             case CTRLRIGHT:
-                light_on_cb(&fixture[item]);
+                light_on_cb(fixture[item]);
                 break;
             case CTRLBOTH:
 
                 for (int x = 0; x < FIXTURE_COUNT; x++)
                 {
-                    light_on_cb(&fixture[x]);
+                    light_on_cb(fixture[x]);
                 }
 
                 break;

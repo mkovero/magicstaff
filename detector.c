@@ -101,9 +101,10 @@ float counterY = 0.0f;
 float counterZ = 0.0f;
 
 // Thresholds
-const float T_down = 0.5f;     // Below this, decay occurs
-const float T_trigger = 60.0f; // Trigger threshold
-const float decay_rate = 5.0f; // How fast counters decay
+const float T_down = 1.5f;     // Below this, decay occurs
+const float T_trigger = 40.0f; // Trigger threshold
+const float F_trigger = 2.0f;  // Floor to hold
+const float decay_rate = 10.0f; // How fast counters decay
 const float alpha = 0.5f;
 int64_t lastTrigger = 0;
 int64_t triggerHold = 1 * 1000 * 1000;
@@ -117,7 +118,7 @@ void sampler(void *pvParameters)
         .locked = false,
         .reallyLocked = false,
         .item = 0,
-        .still_time = 200,
+        .holding = false
     };
     gestureState *ptr = &gesture;
     atomic_store(&gesture.item, 0); // write
@@ -127,9 +128,9 @@ void sampler(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     xQueueSend(gestureQueue, &ptr, portMAX_DELAY);
-            SensorSample a;
+    SensorSample a;
 
-   // SensorSample a;
+    // SensorSample a;
     while (1)
     {
         if ((xQueueReceive(accelQueue, &a, portMAX_DELAY)) == pdPASS)
@@ -157,6 +158,16 @@ void sampler(void *pvParameters)
                 counterZ += z;
             else
                 counterZ += alpha * (0.0f - counterZ);
+
+            if ((fabs(counterX) <= F_trigger) && (fabs(counterY) <= F_trigger) && (fabs(counterZ) <= F_trigger))
+            {
+               // printf("We are holding.\n");
+                atomic_store(&gesture.holding, true);
+            }
+            else
+            {
+                atomic_store(&gesture.holding, false);
+            }
 
             if ((fabs(counterX) >= T_trigger) || (fabs(counterY) >= T_trigger) || (fabs(counterZ) >= T_trigger))
             {
