@@ -105,7 +105,7 @@ void jsonTask(void *pvParameters)
             {
                 xQueueSend(vectorQueue, &data, 0);
             }
-            //      printf("converted to %d/%d/%d\n", color.r, color.g, color.b);
+             //     printf("got %.2f/%.2f/%.2f\n", values[0], values[1], values[2]);
         }
         else if (strcmp(type, "android.sensor.linear_acceleration") == 0)
         {
@@ -113,26 +113,6 @@ void jsonTask(void *pvParameters)
             {
                 xQueueSend(accelQueue, &data, 0);
             }
-
-            /* SensorSample *s = &a->samples[a->head];
-
-             s->received_ms = get_current_ms();
-             s->timestamp = timestamp / 1000000; // convert ns → ms
-             s->type = LINEAR_ACCEL;
-
-             memcpy(s->values, values, sizeof(s->values));
-
-             a->head = (a->head + 1) % BUFFER_SIZE;
-
-             // Send buffer to detector task
-             if (accelQueue != NULL)
-             {
-                 xQueueSend(accelQueue, &a, portMAX_DELAY);
-             }
-             else
-             {
-                 printf("accelQueue is NULL, send failed\n");
-             }*/
         }
         else
         {

@@ -50,6 +50,18 @@ void osc_send(oscFixture fixture)
     // printf("Asked to send %d/%d/%d\n", fixture.color.r, fixture.color.g, fixture.color.b);
     udp_send(&txOscBundle, fixture.sockfd);
 }
+void osc_brightness(uint32_t br, int sockfd)
+{
+    smallUdpPacket txOscBundle;
+    memset(&txOscBundle, 0, sizeof(txOscBundle));
+    txOscBundle.addr.sin_addr.s_addr = inet_addr("192.168.9.131");
+    txOscBundle.addr.sin_port = htons(7700);
+    txOscBundle.addr.sin_family = AF_INET;
+    tosc_bundle bundle;
+    txOscBundle.len = tosc_writeMessage(txOscBundle.buf, sizeof(txOscBundle.buf), "/master", "i", br);
+
+    udp_send(&txOscBundle, sockfd);
+}
 void schedule_osc_event(int64_t delay_us, event_cb_t cb, oscFixture fixture)
 {
     OSC_Event evt;
@@ -118,6 +130,9 @@ void oscTask(void *pv)
     fixture[3].pathR = "/r4";
     fixture[3].pathG = "/g4";
     fixture[3].pathB = "/b4";
+    const char* masterPath = "/master";
+    printf("Master path %s %d\n", masterPath, qlc_crc16_x25(masterPath) + 1);
+
     for (int x = 0; x < FIXTURE_COUNT; x++)
     {
 
@@ -148,10 +163,10 @@ void oscTask(void *pv)
         //    printf("Received %.2f/%.2f/%.2f ", values[0], values[1], values[2]);
         SensorSample v;
         atomic_uintmax_t item = atomic_load(&gesture->item); // read
-
+        uint32_t prevVy = 0;
         if (xQueueReceive(vectorQueue, &v, 0))
         {
-            if (!atomic_load(&gesture->locked))
+            if (!atomic_load(&gesture->locked) && atomic_load(&gesture->holding))
             {
                 if (!fixture[item].oscInitialized)
                 {
@@ -190,12 +205,21 @@ void oscTask(void *pv)
                 //  if (fixture[item].virtualQuat)
                 //    fixture[item].virtualQuat = false;
             }
-            else
+            if (atomic_load(&gesture->locked))
             {
                 if (!fixture[item].virtualQuat)
                 {
                     memcpy(fixture[item].quat, v.values, sizeof(fixture[item].quat));
                     fixture[item].virtualQuat = true;
+                }
+                if (atomic_load(&gesture->holding) && !atomic_load(&gesture->reallyLocked))
+                {
+                    uint32_t vy = map_float_to_uint(v.values[1], -1.0f, 1.0f, 0.0f, 255.0f);
+              //      printf("%.2f would be mapped to %d\n", v.values[1], vy);
+                    if (vy != prevVy) { 
+                    osc_brightness(vy, sockfd);
+                    prevVy = vy;
+                    }
                 }
             }
         }

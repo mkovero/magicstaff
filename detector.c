@@ -29,7 +29,7 @@ void gestureReact(Direction direction)
         switch (direction)
         {
         case LEFT:
-            if (atomic_load(&gesture->locked) && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
+            if (((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
             {
                 if (item > 0)
                 {
@@ -40,7 +40,7 @@ void gestureReact(Direction direction)
             }
             break;
         case RIGHT:
-            if ((item <= MAXITEMS) && atomic_load(&gesture->locked) && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
+            if ((item <= MAXITEMS) && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown) && !gesture->reallyLocked)
             {
                 if (item < MAXITEMS)
                 {
@@ -58,9 +58,16 @@ void gestureReact(Direction direction)
                     atomic_store(&gesture->locked, false);
                     osc.type = CTRLBOTH;
                     printf("Control unlocked\n");
+                    break;
                 }
             }
-            break;
+            if (gesture->reallyLocked&& ((currentTime - gesture->lastGesture) > gesture->gestureCooldown))
+            {
+                gesture->reallyLocked = false;
+                osc.type = CTRLBOTH;
+                printf("Control really unlocked\n");
+                break;
+            }
         case PUSH:
             if (!gesture->reallyLocked && ((currentTime - gesture->lastGesture) > gesture->gestureCooldown))
             {
@@ -69,9 +76,16 @@ void gestureReact(Direction direction)
                     atomic_store(&gesture->locked, true);
                     osc.type = CTRLBOTH;
                     printf("Control locked\n");
+                    break;
                 }
             }
-            break;
+            if (atomic_load(&gesture->locked) && !gesture->reallyLocked&& ((currentTime - gesture->lastGesture) > gesture->gestureCooldown))
+            {
+                gesture->reallyLocked = true;
+                osc.type = CTRLBOTH;
+                printf("Control really locked\n");
+                break;
+            }
         case SHAKE:
             if (atomic_load(&gesture->locked) && !gesture->reallyLocked)
             {
@@ -101,9 +115,9 @@ float counterY = 0.0f;
 float counterZ = 0.0f;
 
 // Thresholds
-const float T_down = 1.5f;     // Below this, decay occurs
-const float T_trigger = 40.0f; // Trigger threshold
-const float F_trigger = 2.0f;  // Floor to hold
+const float T_down = 1.5f;      // Below this, decay occurs
+const float T_trigger = 40.0f;  // Trigger threshold
+const float F_trigger = 2.0f;   // Floor to hold
 const float decay_rate = 10.0f; // How fast counters decay
 const float alpha = 0.5f;
 int64_t lastTrigger = 0;
@@ -118,8 +132,7 @@ void sampler(void *pvParameters)
         .locked = false,
         .reallyLocked = false,
         .item = 0,
-        .holding = false
-    };
+        .holding = false};
     gestureState *ptr = &gesture;
     atomic_store(&gesture.item, 0); // write
 
@@ -161,7 +174,7 @@ void sampler(void *pvParameters)
 
             if ((fabs(counterX) <= F_trigger) && (fabs(counterY) <= F_trigger) && (fabs(counterZ) <= F_trigger))
             {
-               // printf("We are holding.\n");
+                // printf("We are holding.\n");
                 atomic_store(&gesture.holding, true);
             }
             else

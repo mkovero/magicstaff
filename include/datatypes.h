@@ -188,6 +188,27 @@ static inline int64_t get_current_us(void)
     return ts.tv_sec * 1000000LL + ts.tv_nsec / 1000LL;
 }
 
+static inline uint32_t map_float_to_uint(
+    float x,
+    float in_min, float in_max,
+    float out_min, float out_max
+) {
+    // Avoid division by zero
+    if (in_max == in_min) return (uint32_t)out_min;
+
+    // Normalize
+    float t = (x - in_min) / (in_max - in_min);
+
+    // Scale
+    float y = out_min + t * (out_max - out_min);
+
+    // Clamp to the valid range of uint32_t
+    if (y < out_min) y = out_min;
+    if (y > out_max) y = out_max;
+
+    return (uint32_t)(y);  // Optional rounding to nearest
+}
+
 void udpRX(void *pvParameters);
 void detectorTask(void *params);
 int64_t get_current_ms(void);
